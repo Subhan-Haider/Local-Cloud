@@ -1,0 +1,28 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // Check if the user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Strictly verify the user is one of the registered admins
+    function isAdmin() {
+      return isAuthenticated() && 
+        (request.auth.token.email == 'setupg98@gmail.com' || 
+         request.auth.token.email == 'support@subhan.tech');
+    }
+
+    match /{allPaths=**} {
+      // Absolute lockdown: Only admins can read files
+      allow read: if isAdmin();
+      
+      // Absolute lockdown: Only admins can upload files
+      // Extra Security: Limit file size to 500MB max per file in Firebase Storage
+      allow write: if isAdmin() 
+                   && request.resource.size < 500 * 1024 * 1024;
+    }
+  }
+}
