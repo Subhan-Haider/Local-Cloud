@@ -1468,7 +1468,7 @@ app.post("/admin/bulk-share-email", requireAuth, async (req, res) => {
       folder,
       name,
       expiresAt: durationMs ? Date.now() + durationMs : null,
-      password: password || null,
+      password: password ? crypto.createHash("sha256").update(password).digest("hex") : null,
       createdAt: Date.now()
     };
     
