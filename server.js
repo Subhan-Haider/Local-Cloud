@@ -2176,43 +2176,24 @@ app.post("/admin/zip", requireAuth, (req, res) => {
   }
 
   const resolvedUploadPath = path.resolve(UPLOAD_PATH);
-  const archive = archiver("zip", { zlib: { level: 9 } });
   const outputName = zipName ? `${zipName.replace(/[^a-zA-Z0-9.\-_]/g, "_")}.zip` : `archive-${Date.now()}.zip`;
 
-  let fileCount = 0;
-  const db = readDb();
-
-  files.forEach(({ folder, name }) => {
+  // --- Step 1: Validate which files actually exist (before touching the response) ---
+  const validFiles = files.map(({ folder, name }) => {
     const filePath = path.resolve(
       folder && folder !== "root"
         ? path.join(UPLOAD_PATH, folder, name)
         : path.join(UPLOAD_PATH, name)
     );
+    return { folder, name, filePath, exists: filePath.startsWith(resolvedUploadPath) && fs.existsSync(filePath) };
+  }).filter(f => f.exists);
 
-    if (filePath.startsWith(resolvedUploadPath) && fs.existsSync(filePath)) {
-      const stats = fs.statSync(filePath);
-      if (stats.isDirectory()) {
-        archive.directory(filePath, name);
-      } else {
-        archive.file(filePath, { name });
-      }
-      fileCount++;
-
-      // Record download analytics
-      try {
-        const dateStr = new Date().toISOString().split("T")[0];
-        db.analytics.totalDownloads = (db.analytics.totalDownloads || 0) + stats.size;
-        if (!db.analytics.dailyStats[dateStr]) {
-          db.analytics.dailyStats[dateStr] = { uploads: 0, downloads: 0 };
-        }
-        db.analytics.dailyStats[dateStr].downloads = (db.analytics.dailyStats[dateStr].downloads || 0) + stats.size;
-      } catch (e) { }
-    }
-  });
-
-  if (fileCount === 0) {
+  if (validFiles.length === 0) {
     return res.status(404).json({ error: "No accessible files found to zip" });
   }
+
+  // --- Step 2: Set up archive and pipe to response ---
+  const archive = archiver("zip", { zlib: { level: 9 } });
 
   archive.on("error", (err) => {
     console.error("Archive error:", err);
@@ -2221,12 +2202,35 @@ app.post("/admin/zip", requireAuth, (req, res) => {
     }
   });
 
-  res.attachment(outputName);
+  res.setHeader("Content-Type", "application/zip");
+  res.setHeader("Content-Disposition", `attachment; filename="${outputName}"`);
   archive.pipe(res);
 
-  writeDb(db);
-  logEvent("BULK_ZIP_DOWNLOAD", { fileCount, outputName });
+  // --- Step 3: Add files to archive ---
+  const db = readDb();
+  validFiles.forEach(({ folder, name, filePath }) => {
+    const stats = fs.statSync(filePath);
+    if (stats.isDirectory()) {
+      archive.directory(filePath, name);
+    } else {
+      archive.file(filePath, { name });
+    }
 
+    // Record download analytics
+    try {
+      const dateStr = new Date().toISOString().split("T")[0];
+      db.analytics.totalDownloads = (db.analytics.totalDownloads || 0) + stats.size;
+      if (!db.analytics.dailyStats[dateStr]) {
+        db.analytics.dailyStats[dateStr] = { uploads: 0, downloads: 0 };
+      }
+      db.analytics.dailyStats[dateStr].downloads = (db.analytics.dailyStats[dateStr].downloads || 0) + stats.size;
+    } catch (e) { }
+  });
+
+  writeDb(db);
+  logEvent("BULK_ZIP_DOWNLOAD", { fileCount: validFiles.length, outputName });
+
+  // --- Step 4: Finalize ---
   archive.finalize();
 });
 
