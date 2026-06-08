@@ -11,6 +11,7 @@ import { api, apiInstance } from "@/lib/api";
 import { useToast } from "@/components/ui/ToastProvider";
 import { LegacyGuides } from "@/components/developer/LegacyGuides";
 import { EmailGuides } from "@/components/developer/EmailGuides";
+import { UserAuthGuides } from "@/components/developer/UserAuthGuides";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Endpoint {
@@ -370,6 +371,72 @@ const ENDPOINTS: Endpoint[] = [
     params: [],
     responseExample: `{ "status": "ok", "uptime": 3600 }`,
   },
+  // Auth DB
+  {
+    id: "auth-register",
+    method: "POST",
+    path: "/auth/register",
+    summary: "Register a new user account",
+    auth: "api-key",
+    category: "Auth DB",
+    bodyType: "json",
+    params: [
+      { name: "email", in: "body", type: "string", required: true, description: "User email address" },
+      { name: "password", in: "body", type: "string", required: true, description: "Password (min 6 chars)" },
+      { name: "name", in: "body", type: "string", required: false, description: "Display name" },
+      { name: "metadata", in: "body", type: "string", required: false, description: 'JSON object e.g. {"plan":"free"}' },
+    ],
+    responseExample: `{ "success": true, "uid": "abc123", "email": "user@example.com", "message": "Account created." }`,
+  },
+  {
+    id: "auth-login",
+    method: "POST",
+    path: "/auth/login",
+    summary: "Sign in and receive an ID token",
+    auth: "api-key",
+    category: "Auth DB",
+    bodyType: "json",
+    params: [
+      { name: "email", in: "body", type: "string", required: true, description: "User email" },
+      { name: "password", in: "body", type: "string", required: true, description: "User password" },
+    ],
+    responseExample: `{ "success": true, "token": "eyJ...", "uid": "abc123", "profile": { "name": "...", "role": "user" } }`,
+  },
+  {
+    id: "auth-forgot-password",
+    method: "POST",
+    path: "/auth/forgot-password",
+    summary: "Send a password reset email",
+    auth: "api-key",
+    category: "Auth DB",
+    bodyType: "json",
+    params: [
+      { name: "email", in: "body", type: "string", required: true, description: "User email" },
+    ],
+    responseExample: `{ "success": true, "message": "Password reset email sent." }`,
+  },
+  {
+    id: "auth-me-get",
+    method: "GET",
+    path: "/auth/me",
+    summary: "Get the current user's profile",
+    auth: "session",
+    category: "Auth DB",
+    params: [],
+    responseExample: `{ "success": true, "profile": { "uid": "...", "email": "...", "name": "...", "role": "user", "metadata": {} } }`,
+  },
+  {
+    id: "admin-list-users",
+    method: "GET",
+    path: "/admin/users",
+    summary: "List all registered users",
+    auth: "api-key",
+    category: "Auth DB",
+    params: [
+      { name: "limit", in: "query", type: "number", required: false, description: "Max users to return (default 50)" },
+    ],
+    responseExample: `{ "success": true, "count": 12, "users": [ { "uid": "...", "email": "...", "name": "...", "role": "user" } ] }`,
+  },
 ];
 
 const CATEGORIES = Array.from(new Set(ENDPOINTS.map(e => e.category)));
@@ -389,6 +456,7 @@ const CATEGORY_ICONS: Record<string, React.ElementType> = {
   "File Management": Code,
   Analytics: Search,
   System: CheckCircle2,
+  "Auth DB": Lock,
 };
 
 // ─── Main Component ────────────────────────────────────────────────────────────
@@ -594,6 +662,17 @@ export default function DeveloperPage() {
                 <BookOpen className="h-4 w-4 shrink-0" />
                 Email Guides
               </button>
+              <button
+                onClick={() => { setActiveCategory("Auth Guides"); setExpandedEndpoint(null); }}
+                className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-sm font-medium transition-all ${
+                  activeCategory === "Auth Guides"
+                    ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300"
+                    : "text-gray-600 hover:bg-slate-50 dark:text-gray-400 dark:hover:bg-slate-800/50"
+                }`}
+              >
+                <Lock className="h-4 w-4 shrink-0" />
+                Auth Guides
+              </button>
             </nav>
           </aside>
 
@@ -608,6 +687,8 @@ export default function DeveloperPage() {
               <LegacyGuides config={config} handleCopy={handleCopy} copied={copied} />
             ) : activeCategory === "Email Guides" ? (
               <EmailGuides config={config} handleCopy={handleCopy} copied={copied} />
+            ) : activeCategory === "Auth Guides" ? (
+              <UserAuthGuides config={config} handleCopy={handleCopy} copied={copied} />
             ) : (
               categoryEndpoints.map(ep => {
                 const isOpen = expandedEndpoint === ep.id;

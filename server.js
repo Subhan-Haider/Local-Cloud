@@ -3086,6 +3086,300 @@ app.delete("/admin/settings/notifications/emails", requireAuth, (req, res) => {
   res.json({ success: true, notificationEmails: db.settings?.notificationEmails || [] });
 });
 
+
+// =====================
+// USER AUTH DATABASE API
+// =====================
+
+const FIREBASE_WEB_API_KEY = process.env.FIREBASE_WEB_API_KEY || "";
+
+// Middleware: require a valid Firebase ID token from the requesting user
+const requireUserAuth = async (req, res, next) => {
+  const authHeader = req.headers["authorization"];
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "Missing Bearer token" });
+  }
+  const token = authHeader.split(" ")[1];
+  try {
+    const decoded = await admin.auth().verifyIdToken(token);
+    req.user = decoded;
+    next();
+  } catch (err) {
+    return res.status(401).json({ error: "Invalid or expired token" });
+  }
+};
+
+// POST /auth/register — Create new user account (open registration)
+app.post("/auth/register", async (req, res) => {
+  const { email, password, name, metadata } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ error: "email and password are required" });
+  }
+  if (password.length < 6) {
+    return res.status(400).json({ error: "Password must be at least 6 characters" });
+  }
+  try {
+    const userRecord = await admin.auth().createUser({
+      email,
+      password,
+      displayName: name || "",
+      emailVerified: false,
+    });
+
+    // Store profile in Firestore
+    const db = admin.firestore();
+    await db.collection("users").doc(userRecord.uid).set({
+      uid: userRecord.uid,
+      email: userRecord.email,
+      name: name || "",
+      avatar: "",
+      role: "user",
+      createdAt: new Date().toISOString(),
+      lastLogin: null,
+      metadata: metadata || {},
+    });
+
+    // Send email verification
+    try {
+      if (transporter) {
+        const verifyLink = await admin.auth().generateEmailVerificationLink(email);
+        await transporter.sendMail({
+          from: process.env.SMTP_FROM || process.env.SMTP_USER,
+          to: email,
+          subject: "Verify your email address",
+          html: `
+            <div style="font-family: sans-serif; padding: 40px 20px; background: #f8fafc; text-align: center;">
+              <div style="max-width: 560px; margin: 0 auto; background: #fff; border-radius: 16px; padding: 40px; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+                <h2 style="color: #4f46e5; margin-top: 0;">Verify Your Email</h2>
+                <p style="color: #64748b;">Hi${name ? " " + name : ""},<br/>Click the button below to verify your email address and activate your account.</p>
+                <a href="${verifyLink}" style="display:inline-block;background:#4f46e5;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;margin-top:16px;">Verify Email</a>
+                <p style="color:#94a3b8;font-size:13px;margin-top:24px;">If you didn't create an account, you can safely ignore this email.</p>
+              </div>
+            </div>`,
+        });
+      }
+    } catch (_) { /* Non-fatal: verification email might fail */ }
+
+    res.status(201).json({
+      success: true,
+      uid: userRecord.uid,
+      email: userRecord.email,
+      message: "Account created. Check your email to verify your address.",
+    });
+  } catch (err) {
+    if (err.code === "auth/email-already-exists") {
+      return res.status(409).json({ error: "An account with this email already exists." });
+    }
+    console.error("Register error:", err);
+    res.status(500).json({ error: err.message || "Registration failed" });
+  }
+});
+
+// POST /auth/login — Sign in with email + password, returns idToken
+app.post("/auth/login", async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ error: "email and password are required" });
+  }
+  if (!FIREBASE_WEB_API_KEY) {
+    return res.status(503).json({ error: "FIREBASE_WEB_API_KEY is not configured on the server." });
+  }
+  try {
+    const axios = require("axios");
+    const fbRes = await axios.post(
+      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_WEB_API_KEY}`,
+      { email, password, returnSecureToken: true },
+      { timeout: 8000 }
+    );
+    const { idToken, localId: uid, expiresIn } = fbRes.data;
+
+    // Update lastLogin in Firestore
+    try {
+      const db = admin.firestore();
+      await db.collection("users").doc(uid).update({ lastLogin: new Date().toISOString() });
+    } catch (_) {}
+
+    // Fetch profile
+    let profile = {};
+    try {
+      const db = admin.firestore();
+      const doc = await db.collection("users").doc(uid).get();
+      if (doc.exists) profile = doc.data();
+    } catch (_) {}
+
+    res.json({ success: true, token: idToken, expiresIn, uid, profile });
+  } catch (err) {
+    const code = err?.response?.data?.error?.message;
+    if (code === "EMAIL_NOT_FOUND" || code === "INVALID_PASSWORD" || code === "INVALID_LOGIN_CREDENTIALS") {
+      return res.status(401).json({ error: "Invalid email or password." });
+    }
+    if (code === "TOO_MANY_ATTEMPTS_TRY_LATER") {
+      return res.status(429).json({ error: "Too many failed attempts. Please try again later." });
+    }
+    console.error("Login error:", err?.response?.data || err.message);
+    res.status(500).json({ error: "Login failed." });
+  }
+});
+
+// POST /auth/forgot-password — Send a password reset email
+app.post("/auth/forgot-password", async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: "email is required" });
+  try {
+    const resetLink = await admin.auth().generatePasswordResetLink(email);
+    if (transporter) {
+      await transporter.sendMail({
+        from: process.env.SMTP_FROM || process.env.SMTP_USER,
+        to: email,
+        subject: "Reset your password",
+        html: `
+          <div style="font-family: sans-serif; padding: 40px 20px; background: #f8fafc; text-align: center;">
+            <div style="max-width: 560px; margin: 0 auto; background: #fff; border-radius: 16px; padding: 40px; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+              <h2 style="color: #ef4444; margin-top: 0;">Reset Your Password</h2>
+              <p style="color: #64748b;">We received a request to reset your password. Click the button below to choose a new one.</p>
+              <a href="${resetLink}" style="display:inline-block;background:#ef4444;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;margin-top:16px;">Reset Password</a>
+              <p style="color:#94a3b8;font-size:13px;margin-top:24px;">If you didn't request this, you can safely ignore this email.</p>
+            </div>
+          </div>`,
+      });
+    }
+    res.json({ success: true, message: "Password reset email sent." });
+  } catch (err) {
+    if (err.code === "auth/user-not-found") {
+      // Return success anyway to prevent email enumeration
+      return res.json({ success: true, message: "Password reset email sent." });
+    }
+    console.error("Forgot password error:", err);
+    res.status(500).json({ error: "Failed to send password reset email." });
+  }
+});
+
+// POST /auth/verify-email — (Re)send an email verification link
+app.post("/auth/verify-email", requireUserAuth, async (req, res) => {
+  try {
+    const verifyLink = await admin.auth().generateEmailVerificationLink(req.user.email);
+    if (transporter) {
+      await transporter.sendMail({
+        from: process.env.SMTP_FROM || process.env.SMTP_USER,
+        to: req.user.email,
+        subject: "Verify your email address",
+        html: `<div style="font-family:sans-serif;padding:40px 20px;background:#f8fafc;text-align:center;"><div style="max-width:560px;margin:0 auto;background:#fff;border-radius:16px;padding:40px;"><h2 style="color:#4f46e5;margin-top:0;">Verify Your Email</h2><p style="color:#64748b;">Click below to verify your email address.</p><a href="${verifyLink}" style="display:inline-block;background:#4f46e5;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;margin-top:16px;">Verify Email</a></div></div>`,
+      });
+    }
+    res.json({ success: true, message: "Verification email sent." });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to send verification email." });
+  }
+});
+
+// GET /auth/me — Get the current user's profile
+app.get("/auth/me", requireUserAuth, async (req, res) => {
+  try {
+    const db = admin.firestore();
+    const doc = await db.collection("users").doc(req.user.uid).get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: "User profile not found." });
+    }
+    res.json({ success: true, profile: doc.data() });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch profile." });
+  }
+});
+
+// PUT /auth/me — Update the current user's profile
+app.put("/auth/me", requireUserAuth, async (req, res) => {
+  const { name, avatar, metadata } = req.body;
+  const updates = {};
+  if (name !== undefined) updates.name = name;
+  if (avatar !== undefined) updates.avatar = avatar;
+  if (metadata !== undefined) updates.metadata = metadata;
+
+  if (Object.keys(updates).length === 0) {
+    return res.status(400).json({ error: "No fields to update provided." });
+  }
+  try {
+    const db = admin.firestore();
+    await db.collection("users").doc(req.user.uid).update(updates);
+    if (name) {
+      await admin.auth().updateUser(req.user.uid, { displayName: name });
+    }
+    res.json({ success: true, updated: updates });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to update profile." });
+  }
+});
+
+// DELETE /auth/me — Delete the current user's own account
+app.delete("/auth/me", requireUserAuth, async (req, res) => {
+  try {
+    const db = admin.firestore();
+    await db.collection("users").doc(req.user.uid).delete();
+    await admin.auth().deleteUser(req.user.uid);
+    res.json({ success: true, message: "Account deleted." });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to delete account." });
+  }
+});
+
+// GET /admin/users — List all users (api-key protected)
+app.get("/admin/users", requireAuth, async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 50;
+    const db = admin.firestore();
+    const snapshot = await db.collection("users").orderBy("createdAt", "desc").limit(limit).get();
+    const users = snapshot.docs.map(doc => doc.data());
+    res.json({ success: true, count: users.length, users });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to list users." });
+  }
+});
+
+// GET /admin/users/:uid — Get a specific user
+app.get("/admin/users/:uid", requireAuth, async (req, res) => {
+  try {
+    const db = admin.firestore();
+    const doc = await db.collection("users").doc(req.params.uid).get();
+    if (!doc.exists) return res.status(404).json({ error: "User not found." });
+    res.json({ success: true, profile: doc.data() });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to get user." });
+  }
+});
+
+// PUT /admin/users/:uid — Update any user's profile or role
+app.put("/admin/users/:uid", requireAuth, async (req, res) => {
+  const { name, avatar, role, metadata } = req.body;
+  const updates = {};
+  if (name !== undefined) updates.name = name;
+  if (avatar !== undefined) updates.avatar = avatar;
+  if (role !== undefined) updates.role = role;
+  if (metadata !== undefined) updates.metadata = metadata;
+
+  if (Object.keys(updates).length === 0) {
+    return res.status(400).json({ error: "No fields to update provided." });
+  }
+  try {
+    const db = admin.firestore();
+    await db.collection("users").doc(req.params.uid).update(updates);
+    if (name) await admin.auth().updateUser(req.params.uid, { displayName: name });
+    res.json({ success: true, updated: updates });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to update user." });
+  }
+});
+
+// DELETE /admin/users/:uid — Delete any user
+app.delete("/admin/users/:uid", requireAuth, async (req, res) => {
+  try {
+    const db = admin.firestore();
+    await db.collection("users").doc(req.params.uid).delete();
+    await admin.auth().deleteUser(req.params.uid);
+    res.json({ success: true, message: "User deleted." });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to delete user." });
+  }
+});
+
 // =====================
 // HEALTH & GENERAL
 // =====================
