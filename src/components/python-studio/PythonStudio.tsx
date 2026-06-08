@@ -399,6 +399,30 @@ export function PythonStudio() {
     }
   };
 
+  // ── Download Folder ──────────────────────────────────────────────────────────
+  const handleDownloadFolder = async (folder: string) => {
+    try {
+      const files = await api.getFolderFiles(folder);
+      if (files.length === 0) {
+        toastError("Folder is empty");
+        return;
+      }
+      success(`Zipping ${files.length} files...`);
+      const filesToZip = files.map(f => ({ folder: f.folder, name: f.name }));
+      const blob = await api.zipFiles(filesToZip, folder);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${folder}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      toastError("Failed to download folder");
+    }
+  };
+
   const isDirty = editorContent !== savedContent;
 
   // ── Render ────────────────────────────────────────────────────────────────────
@@ -514,6 +538,11 @@ export function PythonStudio() {
                           title="Refresh"
                           className={`rounded p-0.5 ${t.textMuted} hover:${t.text} transition-colors`}
                         ><RefreshCw className="h-2.5 w-2.5" /></button>
+                        <button
+                          onClick={() => handleDownloadFolder(project.name)}
+                          title="Download Folder"
+                          className={`rounded p-0.5 ${t.textMuted} hover:text-green-400 transition-colors`}
+                        ><Download className="h-2.5 w-2.5" /></button>
                       </div>
 
                       {/* New file input */}

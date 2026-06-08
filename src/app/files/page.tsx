@@ -58,7 +58,12 @@ export default function FilesPage() {
   let filteredFiles = files;
   if (activeFolder) filteredFiles = filteredFiles.filter(f => f.folder === activeFolder);
   if (activeType !== "all") filteredFiles = filteredFiles.filter(f => f.type === activeType);
-  if (searchQuery) filteredFiles = filteredFiles.filter(f => f.name.toLowerCase().includes(searchQuery));
+  if (searchQuery) {
+    filteredFiles = filteredFiles.filter(f => 
+      f.name.toLowerCase().includes(searchQuery) || 
+      f.folder.toLowerCase().includes(searchQuery)
+    );
+  }
 
   const handleSelect = (key: string) => {
     setSelectedFiles(prev => 
