@@ -1586,49 +1586,120 @@ app.get("/share/:shareId", (req, res) => {
   const db = readDb();
   const share = db.shares[shareId];
 
+  const renderSharePage = (title, message, isPasswordForm = false, isError = false) => `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>${title}</title>
+      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+      <style>
+        :root {
+          --bg-color: #0f172a;
+          --card-bg: rgba(30, 41, 59, 0.7);
+          --card-border: rgba(255, 255, 255, 0.1);
+          --primary: #6366f1;
+          --primary-hover: #4f46e5;
+          --text-main: #f8fafc;
+          --text-muted: #94a3b8;
+        }
+        body {
+          font-family: 'Inter', -apple-system, sans-serif;
+          background: var(--bg-color);
+          background-image: radial-gradient(circle at top right, rgba(99, 102, 241, 0.15), transparent 40%), radial-gradient(circle at bottom left, rgba(236, 72, 153, 0.1), transparent 40%);
+          color: var(--text-main);
+          display: flex; align-items: center; justify-content: center;
+          min-height: 100vh; margin: 0;
+        }
+        .container {
+          width: 100%; max-width: 400px; padding: 20px;
+          animation: fadeIn 0.4s ease-out forwards;
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .card {
+          background: var(--card-bg);
+          backdrop-filter: blur(16px);
+          -webkit-backdrop-filter: blur(16px);
+          border: 1px solid var(--card-border);
+          border-radius: 24px; padding: 40px; text-align: center;
+          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+          position: relative; overflow: hidden;
+        }
+        .card::before {
+          content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px;
+          background: linear-gradient(90deg, #6366f1, #ec4899);
+        }
+        .icon-wrapper {
+          width: 64px; height: 64px; border-radius: 50%;
+          display: flex; align-items: center; justify-content: center; margin: 0 auto 24px;
+          background: ${isError ? 'rgba(239, 68, 68, 0.1)' : 'rgba(99, 102, 241, 0.1)'};
+          border: 1px solid ${isError ? 'rgba(239, 68, 68, 0.2)' : 'rgba(99, 102, 241, 0.2)'};
+          color: ${isError ? '#ef4444' : '#818cf8'};
+        }
+        .icon-wrapper svg { width: 32px; height: 32px; }
+        h3 { font-size: 24px; font-weight: 700; margin: 0 0 12px; letter-spacing: -0.025em; }
+        p { color: var(--text-muted); font-size: 15px; line-height: 1.5; margin: 0 0 32px; }
+        form { display: flex; flex-direction: column; gap: 16px; }
+        input {
+          width: 100%; background: rgba(15, 23, 42, 0.6); border: 1px solid ${isError ? 'rgba(239, 68, 68, 0.4)' : 'rgba(255, 255, 255, 0.1)'};
+          color: white; padding: 14px 16px; border-radius: 12px; font-size: 15px; font-family: inherit; box-sizing: border-box; transition: all 0.2s;
+        }
+        input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2); }
+        button {
+          background: var(--primary); color: white; border: none; padding: 14px 24px; border-radius: 12px;
+          font-size: 15px; font-weight: 600; font-family: inherit; cursor: pointer; transition: all 0.2s;
+          box-shadow: 0 4px 6px -1px rgba(99, 102, 241, 0.4);
+        }
+        button:hover { background: var(--primary-hover); transform: translateY(-1px); box-shadow: 0 6px 8px -1px rgba(99, 102, 241, 0.5); }
+        .error-text { color: #ef4444; font-size: 13px; margin-top: -8px; margin-bottom: 0px; font-weight: 500; text-align: left; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="card">
+          <div class="icon-wrapper">
+            ${isError && !isPasswordForm 
+              ? `<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>`
+              : `<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>`}
+          </div>
+          <h3>${title}</h3>
+          <p>${message}</p>
+          ${isPasswordForm ? `
+            <form method="GET">
+              <input type="password" name="pass" placeholder="Enter password" required autofocus />
+              ${isError ? `<div class="error-text">Incorrect password. Please try again.</div>` : ''}
+              <button type="submit">Unlock File</button>
+            </form>
+          ` : ''}
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
   if (!share) {
-    return res.status(404).send("Share link not found or invalid.");
+    return res.status(404).send(renderSharePage("Link Unavailable", "This share link is invalid or no longer exists.", false, true));
   }
 
   if (share.expiresAt && Date.now() > share.expiresAt) {
     delete db.shares[shareId];
     writeDb(db);
-    return res.status(410).send("Share link has expired.");
+    return res.status(410).send(renderSharePage("Link Expired", "This share link has expired and is no longer accessible.", false, true));
   }
 
   if (share.password) {
     const providedPass = req.query.pass || req.headers["x-share-password"];
     if (!providedPass) {
-      return res.status(401).send(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <title>Password Protected File</title>
-          <style>
-            body { font-family: -apple-system, sans-serif; background: #0f172a; color: white; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-            .box { background: #1e293b; padding: 2rem; border-radius: 12px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.5); text-align: center; max-width: 350px; }
-            input { width: 90%; padding: 10px; margin: 15px 0; border: 1px solid #475569; background: #334155; color: white; border-radius: 6px; }
-            button { background: #6366f1; border: none; padding: 10px 20px; color: white; border-radius: 6px; cursor: pointer; font-weight: bold; }
-          </style>
-        </head>
-        <body>
-          <div class="box">
-            <h3>🔒 Password Protected</h3>
-            <p>Enter the password to access this file.</p>
-            <form method="GET">
-              <input type="password" name="pass" placeholder="Password" required autofocus />
-              <br/>
-              <button type="submit">Submit</button>
-            </form>
-          </div>
-        </body>
-        </html>
-      `);
+      return res.status(401).send(renderSharePage("Protected Link", "This file is protected. Please enter the password to securely access its contents.", true, false));
     }
 
     const hashedProvided = crypto.createHash("sha256").update(providedPass).digest("hex");
     if (hashedProvided !== share.password) {
-      return res.status(403).send("Incorrect password.");
+      return res.status(403).send(renderSharePage("Protected Link", "This file is protected. Please enter the password to securely access its contents.", true, true));
     }
   }
 
