@@ -2175,21 +2175,21 @@ app.post("/admin/zip", requireAuth, (req, res) => {
     return res.status(400).json({ error: "Files array required" });
   }
 
+  const resolvedUploadPath = path.resolve(UPLOAD_PATH);
   const archive = archiver("zip", { zlib: { level: 9 } });
   const outputName = zipName ? `${zipName.replace(/[^a-zA-Z0-9.\-_]/g, "_")}.zip` : `archive-${Date.now()}.zip`;
-
-  res.attachment(outputName);
-  archive.pipe(res);
 
   let fileCount = 0;
   const db = readDb();
 
   files.forEach(({ folder, name }) => {
-    const filePath = folder && folder !== "root"
-      ? path.join(UPLOAD_PATH, folder, name)
-      : path.join(UPLOAD_PATH, name);
+    const filePath = path.resolve(
+      folder && folder !== "root"
+        ? path.join(UPLOAD_PATH, folder, name)
+        : path.join(UPLOAD_PATH, name)
+    );
 
-    if (filePath.startsWith(UPLOAD_PATH) && fs.existsSync(filePath)) {
+    if (filePath.startsWith(resolvedUploadPath) && fs.existsSync(filePath)) {
       const stats = fs.statSync(filePath);
       if (stats.isDirectory()) {
         archive.directory(filePath, name);
@@ -2209,6 +2209,20 @@ app.post("/admin/zip", requireAuth, (req, res) => {
       } catch (e) { }
     }
   });
+
+  if (fileCount === 0) {
+    return res.status(404).json({ error: "No accessible files found to zip" });
+  }
+
+  archive.on("error", (err) => {
+    console.error("Archive error:", err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Failed to create archive: " + err.message });
+    }
+  });
+
+  res.attachment(outputName);
+  archive.pipe(res);
 
   writeDb(db);
   logEvent("BULK_ZIP_DOWNLOAD", { fileCount, outputName });
