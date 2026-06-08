@@ -1735,6 +1735,155 @@ setInterval(() => {
 }, 60 * 60 * 1000); // Check once per hour
 
 // =====================
+// EMAIL & SHARE ENDPOINTS
+// =====================
+
+app.post("/admin/share/email", requireAuth, async (req, res) => {
+  const { folder, name, email, url, attachFile } = req.body;
+  
+  if (!folder || !name || !email || !url) {
+    return res.status(400).json({ error: "Missing required fields: folder, name, email, url" });
+  }
+
+  if (!transporter) {
+    return res.status(503).json({ error: "Email server (SMTP) is not configured or disabled." });
+  }
+
+  const filePath = folder === "root" 
+    ? path.join(UPLOAD_PATH, name) 
+    : path.join(UPLOAD_PATH, folder, name);
+
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: "File not found on server." });
+  }
+
+  try {
+    const mailOptions = {
+      from: process.env.SMTP_FROM || process.env.SMTP_USER,
+      to: email,
+      subject: `Someone shared a file with you: ${name}`,
+      html: `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 40px 20px; background-color: #f1f5f9; color: #334155; text-align: center;">
+          <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 30px; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+            <div style="background-color: #e0e7ff; height: 60px; width: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px auto;">
+              <span style="font-size: 30px;">📁</span>
+            </div>
+            <h2 style="color: #4f46e5; font-weight: 800; font-size: 24px; margin-bottom: 10px; margin-top: 0;">A File Was Shared With You</h2>
+            <p style="color: #64748b; font-size: 16px; margin-bottom: 30px; line-height: 1.5;">You've been granted access to download the following file:</p>
+            
+            <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; text-align: left; margin-bottom: 30px;">
+              <p style="margin: 0; font-weight: 600; color: #0f172a; font-size: 16px;">${name}</p>
+            </div>
+            
+            <a href="${url}" style="display: inline-block; background-color: #4f46e5; color: #ffffff; font-weight: 600; font-size: 16px; text-decoration: none; padding: 14px 28px; border-radius: 8px; transition: background-color 0.2s;">View & Download File</a>
+          </div>
+        </div>
+      `
+    };
+
+    if (attachFile) {
+      const stats = fs.statSync(filePath);
+      const sizeMB = stats.size / (1024 * 1024);
+      if (sizeMB <= 25) {
+        mailOptions.attachments = [{ filename: name, path: filePath }];
+      }
+    }
+
+    await transporter.sendMail(mailOptions);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Email send error:", err);
+    res.status(500).json({ error: "Failed to send email." });
+  }
+});
+
+app.post("/admin/bulk-share-email", requireAuth, async (req, res) => {
+  const { files, email, durationMs, password } = req.body;
+  
+  if (!Array.isArray(files) || files.length === 0 || !email) {
+    return res.status(400).json({ error: "Missing required fields: files array and email" });
+  }
+
+  if (!transporter) {
+    return res.status(503).json({ error: "Email server (SMTP) is not configured." });
+  }
+
+  const db = readDb();
+  const fileLinks = [];
+  
+  let hashedPassword = null;
+  if (password) {
+    hashedPassword = crypto.createHash("sha256").update(password).digest("hex");
+  }
+
+  for (const f of files) {
+    const filePath = f.folder === "root" 
+      ? path.join(UPLOAD_PATH, f.name) 
+      : path.join(UPLOAD_PATH, f.folder, f.name);
+
+    if (fs.existsSync(filePath)) {
+      const shareId = crypto.randomBytes(16).toString("hex");
+      const expiresAt = durationMs ? Date.now() + durationMs : null;
+
+      db.shares[shareId] = {
+        folder: f.folder,
+        name: f.name,
+        createdAt: Date.now(),
+        expiresAt,
+        password: hashedPassword,
+      };
+
+      fileLinks.push({
+        name: f.name,
+        url: \`\${BASE_URL}/share/\${shareId}\`
+      });
+    }
+  }
+
+  if (fileLinks.length === 0) {
+    return res.status(404).json({ error: "None of the specified files were found." });
+  }
+
+  writeDb(db);
+
+  try {
+    const listHtml = fileLinks.map(f => 
+      \`<li style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0; list-style-type: none;">
+        <p style="margin: 0 0 6px 0; font-weight: 600; color: #0f172a;">\${f.name}</p>
+        <a href="\${f.url}" style="color: #4f46e5; text-decoration: none; font-size: 14px; font-weight: 500;">Download link &rarr;</a>
+      </li>\`
+    ).join('');
+
+    const mailOptions = {
+      from: process.env.SMTP_FROM || process.env.SMTP_USER,
+      to: email,
+      subject: \`\${fileLinks.length} files shared with you\`,
+      html: \`
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 40px 20px; background-color: #f1f5f9; color: #334155; text-align: center;">
+          <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 30px; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
+            <div style="background-color: #e0e7ff; height: 60px; width: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px auto;">
+              <span style="font-size: 30px;">📚</span>
+            </div>
+            <h2 style="color: #4f46e5; font-weight: 800; font-size: 24px; margin-bottom: 10px; margin-top: 0;">Files Shared With You</h2>
+            <p style="color: #64748b; font-size: 16px; margin-bottom: 30px; line-height: 1.5;">You've been granted access to download \${fileLinks.length} files:</p>
+            
+            <ul style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; text-align: left; margin: 0; padding-left: 20px;">
+              \${listHtml}
+            </ul>
+          </div>
+        </div>
+      \`
+    };
+
+    await transporter.sendMail(mailOptions);
+    res.json({ success: true, count: fileLinks.length });
+  } catch (err) {
+    console.error("Bulk email send error:", err);
+    res.status(500).json({ error: "Failed to send email." });
+  }
+});
+
+// =====================
 // ADDITIONAL ENDPOINTS
 // =====================
 
