@@ -175,6 +175,21 @@ export const api = {
     await apiInstance.post("/admin/share/email", { folder, name, email, url, attachFile });
   },
 
+  bulkShareEmail: async (
+    files: { folder: string; name: string }[],
+    email: string,
+    durationMs: number | null,
+    password?: string
+  ): Promise<{ success: boolean; count: number }> => {
+    const { data } = await apiInstance.post("/admin/bulk-share-email", {
+      files,
+      email,
+      durationMs,
+      password,
+    });
+    return data;
+  },
+
   // Logs
   getLogs: async (): Promise<AuditLog[]> => {
     const { data } = await apiInstance.get("/admin/logs");

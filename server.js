@@ -1445,6 +1445,82 @@ app.post("/admin/share/email", requireAuth, async (req, res) => {
   }
 });
 
+// 9c. SEND BULK SHARE VIA EMAIL
+app.post("/admin/bulk-share-email", requireAuth, async (req, res) => {
+  const { files, email, durationMs, password } = req.body; // files: [{ folder, name }]
+  
+  if (!Array.isArray(files) || files.length === 0 || !email) {
+    return res.status(400).json({ error: "Missing required fields" });
+  }
+
+  if (!transporter) {
+    return res.status(500).json({ error: "SMTP is not configured on the server." });
+  }
+
+  const db = readDb();
+  const fileLinks = [];
+
+  // Generate a share link for each file
+  files.forEach(({ folder, name }) => {
+    const shareId = crypto.randomUUID();
+    db.shares[shareId] = {
+      folder,
+      name,
+      expiresAt: durationMs ? Date.now() + durationMs : null,
+      password: password || null,
+      createdAt: Date.now()
+    };
+    
+    fileLinks.push({
+      name,
+      url: `${BASE_URL}/share/${shareId}`
+    });
+    
+    logEvent("SHARE_CREATED", { folder, name, shareId });
+  });
+
+  writeDb(db);
+
+  try {
+    const fileListHtml = fileLinks.map(f => `
+      <div style="background-color: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 12px; padding: 16px 20px; margin-bottom: 16px; display: flex; align-items: center; justify-content: space-between;">
+        <p style="margin: 0; font-size: 16px; font-weight: 600; color: #0f172a; flex: 1; word-break: break-word; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${f.name}</p>
+        <a href="${f.url}" style="display: inline-block; background-color: #3b82f6; color: #ffffff; font-weight: 600; font-size: 14px; text-decoration: none; padding: 10px 20px; border-radius: 8px; margin-left: 16px; white-space: nowrap; transition: background-color 0.2s;">View / Download</a>
+      </div>
+    `).join("");
+
+    const mailOptions = {
+      from: `"Storage Admin" <${process.env.SMTP_USER}>`,
+      to: email,
+      subject: `📁 ${files.length} file${files.length > 1 ? 's have' : ' has'} been shared with you`,
+      html: `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 40px 20px; background-color: #f8fafc; color: #334155; text-align: center;">
+          <div style="max-width: 650px; margin: 0 auto; background-color: #ffffff; padding: 40px; border-radius: 16px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); border: 1px solid #e2e8f0; text-align: left;">
+            <div style="background-color: #dbeafe; height: 72px; width: 72px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 24px auto;">
+              <span style="font-size: 36px;">📁</span>
+            </div>
+            <h2 style="color: #3b82f6; font-weight: 800; font-size: 26px; margin-bottom: 12px; margin-top: 0; text-align: center;">Files Shared With You</h2>
+            <p style="color: #64748b; font-size: 16px; margin-bottom: 32px; line-height: 1.6; text-align: center;">Someone has securely shared ${files.length} file${files.length > 1 ? 's' : ''} with you via Storage Admin.</p>
+            
+            ${fileListHtml}
+            
+            <div style="margin-top: 40px; padding-top: 24px; border-top: 1px solid #e2e8f0; text-align: center;">
+              <p style="color: #94a3b8; font-size: 13px; line-height: 1.5; margin: 0;">These links ${durationMs ? 'will expire' : 'are permanent'}. Do not share them with anyone else.</p>
+            </div>
+          </div>
+        </div>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+    logEvent("BULK_SHARE_EMAIL_SENT", { count: files.length, email });
+    res.json({ success: true, count: files.length });
+  } catch (err) {
+    console.error("Failed to send bulk share email:", err);
+    res.status(500).json({ error: "Failed to send email" });
+  }
+});
+
 // 10. GET AUDIT LOGS
 app.get("/admin/logs", requireAuth, (req, res) => {
   const db = readDb();

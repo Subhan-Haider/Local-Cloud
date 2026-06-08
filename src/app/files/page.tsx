@@ -6,11 +6,12 @@ import { FileGrid } from "@/components/files/FileGrid";
 import { FolderView } from "@/components/files/FolderView";
 import { FilePreviewModal } from "@/components/files/FilePreviewModal";
 import { ShareModal } from "@/components/files/ShareModal";
+import { BulkShareModal } from "@/components/files/BulkShareModal";
 import { RenameModal } from "@/components/files/RenameModal";
 import { MoveModal } from "@/components/files/MoveModal";
 import { api, FileData } from "@/lib/api";
 import { useToast } from "@/components/ui/ToastProvider";
-import { LayoutGrid, List, Trash2, Filter, Download } from "lucide-react";
+import { LayoutGrid, List, Trash2, Filter, Download, Share2 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 
 export default function FilesPage() {
@@ -28,6 +29,7 @@ export default function FilesPage() {
   // Modals
   const [previewFile, setPreviewFile] = useState<FileData | null>(null);
   const [shareFile, setShareFile] = useState<FileData | null>(null);
+  const [showBulkShare, setShowBulkShare] = useState(false);
   const [renameFile, setRenameFile] = useState<FileData | null>(null);
   const [moveFile, setMoveFile] = useState<FileData | null>(null);
 
@@ -203,6 +205,13 @@ export default function FilesPage() {
                   Download ({selectedFiles.length})
                 </button>
                 <button
+                  onClick={() => setShowBulkShare(true)}
+                  className="flex items-center gap-1.5 rounded-lg bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-950/30 dark:text-indigo-400 dark:hover:bg-indigo-950/50 transition-colors"
+                >
+                  <Share2 className="h-4 w-4" />
+                  Share ({selectedFiles.length})
+                </button>
+                <button
                   onClick={handleBulkDelete}
                   className="flex items-center gap-1.5 rounded-lg bg-red-50 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-100 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50 transition-colors"
                 >
@@ -253,6 +262,12 @@ export default function FilesPage() {
 
       <FilePreviewModal file={previewFile} onClose={() => setPreviewFile(null)} />
       <ShareModal file={shareFile} onClose={() => setShareFile(null)} />
+      {showBulkShare && (
+        <BulkShareModal 
+          files={filteredFiles.filter(f => selectedFiles.includes(`${f.folder}/${f.name}`))} 
+          onClose={() => setShowBulkShare(false)} 
+        />
+      )}
       <RenameModal file={renameFile} onClose={() => setRenameFile(null)} onSuccess={loadData} />
       <MoveModal file={moveFile} folders={Array.from(foldersMap.keys())} onClose={() => setMoveFile(null)} onSuccess={loadData} />
     </>
