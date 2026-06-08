@@ -56,10 +56,11 @@ const nextConfig: NextConfig = {
       { source: "/api/auth/:path*", destination: `${EXPRESS_API_URL}/api/auth/:path*` },
       // Health check
       { source: "/api/health", destination: `${EXPRESS_API_URL}/api/health` },
-      // File & folder operations (rename, move, create)
+      // File & folder operations (rename, move, create, share)
       { source: "/rename", destination: `${EXPRESS_API_URL}/rename` },
       { source: "/move-file", destination: `${EXPRESS_API_URL}/move-file` },
       { source: "/create-folder", destination: `${EXPRESS_API_URL}/create-folder` },
+      { source: "/share/:path*", destination: `${EXPRESS_API_URL}/share/:path*` },
     ];
   },
 };
