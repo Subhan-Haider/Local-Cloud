@@ -10,6 +10,7 @@ import {
 import { api, apiInstance } from "@/lib/api";
 import { useToast } from "@/components/ui/ToastProvider";
 import { LegacyGuides } from "@/components/developer/LegacyGuides";
+import { EmailGuides } from "@/components/developer/EmailGuides";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Endpoint {
@@ -582,6 +583,17 @@ export default function DeveloperPage() {
                 <BookOpen className="h-4 w-4 shrink-0" />
                 Legacy Guides
               </button>
+              <button
+                onClick={() => { setActiveCategory("Email Guides"); setExpandedEndpoint(null); }}
+                className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-sm font-medium transition-all ${
+                  activeCategory === "Email Guides"
+                    ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300"
+                    : "text-gray-600 hover:bg-slate-50 dark:text-gray-400 dark:hover:bg-slate-800/50"
+                }`}
+              >
+                <BookOpen className="h-4 w-4 shrink-0" />
+                Email Guides
+              </button>
             </nav>
           </aside>
 
@@ -594,6 +606,8 @@ export default function DeveloperPage() {
 
             {activeCategory === "Legacy Guides" ? (
               <LegacyGuides config={config} handleCopy={handleCopy} copied={copied} />
+            ) : activeCategory === "Email Guides" ? (
+              <EmailGuides config={config} handleCopy={handleCopy} copied={copied} />
             ) : (
               categoryEndpoints.map(ep => {
                 const isOpen = expandedEndpoint === ep.id;
