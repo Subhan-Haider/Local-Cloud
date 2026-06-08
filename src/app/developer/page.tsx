@@ -130,7 +130,7 @@ const ENDPOINTS: Endpoint[] = [
     method: "POST",
     path: "/admin/share/email",
     summary: "Send a file link via email",
-    auth: "session",
+    auth: "api-key",
     category: "Email",
     bodyType: "json",
     params: [
@@ -147,7 +147,7 @@ const ENDPOINTS: Endpoint[] = [
     method: "POST",
     path: "/admin/bulk-share-email",
     summary: "Send multiple file links in one email",
-    auth: "session",
+    auth: "api-key",
     category: "Email",
     bodyType: "json",
     params: [

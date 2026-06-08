@@ -224,9 +224,17 @@ function logEvent(event, details) {
   triggerWebhook(event, details).catch(() => { });
 }
 
-// AUTH MIDDLEWARE — Verifies Firebase ID tokens
+// AUTH MIDDLEWARE — Verifies Firebase ID tokens or API Keys
 const requireAuth = async (req, res, next) => {
 
+  // 1. Check for API Key first (for programmatic access from other websites/scripts)
+  const apiKey = req.headers["x-api-key"] || req.query.api_key;
+  if (apiKey && apiKey === API_KEY) {
+    req.user = { email: "api-key-user@system", uid: "api-key-access", role: "admin" };
+    return next();
+  }
+
+  // 2. Fallback to Firebase ID Token (for the web dashboard)
   let token = req.query.token || null;
   const authHeader = req.headers["authorization"];
   if (authHeader && authHeader.startsWith("Bearer ")) {
