@@ -1,6 +1,6 @@
-# 🗄️ Storage Server v2
+# 🗄️ Storage Server v4
 
-> A robust, self-hosted file storage and management platform built with **Next.js 16**, **Express.js**, and **Firebase**. Supports secure file uploads, media processing, folder management, two-factor authentication, analytics, webhooks, and more — all from a beautiful, modern dashboard.
+> A robust, self-hosted file storage and management platform built with **Next.js 16**, **Express.js**, and **Firebase**. Supports secure file uploads, media processing, folder management, an in-browser **Python Studio**, two-factor authentication, analytics, webhooks, and more — all from a beautiful, modern dashboard.
 
 ---
 
@@ -18,6 +18,12 @@
 - **Helmet.js** — Security HTTP headers on all responses
 - **CORS** — Configurable origin allowlist (hardcoded + environment + dynamic via `db.json`)
 - **Path Traversal Protection** — All file paths are validated against the uploads root
+
+### 🐍 Python Studio (New in v4)
+- **In-Browser Code Editor** — Write, run, and experiment with Python scripts directly from your dashboard
+- **Live Execution Environment** — See real-time console output and visual results
+- **Data Integration** — Process and analyze files stored in your server
+- **Modern IDE Experience** — Syntax highlighting, auto-completion, and a sleek interface
 
 ### 📁 File Management
 - Upload files up to **500 MB** per file
@@ -102,7 +108,7 @@
 ## 📁 Project Structure
 
 ```
-storage-server-v2/
+storage-server-v4/
 ├── server.js                  # Custom Express backend (all API routes)
 ├── firebase-admin.js          # Firebase Admin SDK initialization
 ├── next.config.ts             # Next.js configuration
@@ -118,6 +124,7 @@ storage-server-v2/
 │   │   ├── files/             # File browser page
 │   │   ├── folders/           # Folder management page
 │   │   ├── uploads/           # Upload page
+│   │   ├── python-studio/     # Python IDE page
 │   │   ├── settings/          # Settings & security page
 │   │   └── (public)/          # Public share pages (no auth)
 │   │
@@ -127,6 +134,7 @@ storage-server-v2/
 │   │   ├── files/             # FileCard, FilePreviewModal, file list
 │   │   ├── folders/           # Folder tree, folder cards
 │   │   ├── layout/            # Sidebar, header, navigation
+│   │   ├── python-studio/     # Python code editor and live preview panes
 │   │   ├── settings/          # Settings panels
 │   │   ├── ui/                # Reusable UI primitives
 │   │   └── upload/            # Upload dropzone, progress
@@ -230,8 +238,8 @@ All authenticated endpoints require a Firebase ID token in the `Authorization: B
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/Subhan-Haider/Storage-server-v2.git
-cd Storage-server-v2
+git clone https://github.com/Subhan-Haider/Storage-server-v4.git
+cd Storage-server-v4
 ```
 
 ### 2. Install Dependencies
