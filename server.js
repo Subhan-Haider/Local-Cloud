@@ -3088,42 +3088,21 @@ app.delete("/admin/settings/notifications/emails", requireAuth, (req, res) => {
 
 
 // =====================
+// USER AUTH DATABASE API
 // =====================
-// USER AUTH DATABASE API (LOCAL)
-// =====================
-const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
 
-const JWT_SECRET = process.env.JWT_SECRET || "fallback_secret_do_not_use_in_prod";
-const USERS_DB_FILE = path.join(UPLOAD_PATH, "users.json");
+const FIREBASE_WEB_API_KEY = process.env.FIREBASE_WEB_API_KEY || "";
 
-const readUsersDb = () => {
-  if (fs.existsSync(USERS_DB_FILE)) {
-    try {
-      return JSON.parse(fs.readFileSync(USERS_DB_FILE, "utf-8"));
-    } catch (e) {
-      console.error("Error reading users DB:", e);
-    }
-  }
-  const defaultDb = { users: [] };
-  fs.writeFileSync(USERS_DB_FILE, JSON.stringify(defaultDb, null, 2));
-  return defaultDb;
-};
-
-const writeUsersDb = (data) => {
-  fs.writeFileSync(USERS_DB_FILE, JSON.stringify(data, null, 2));
-};
-
-// Middleware: require a valid JWT token
-const requireUserAuth = (req, res, next) => {
+// Middleware: require a valid Firebase ID token from the requesting user
+const requireUserAuth = async (req, res, next) => {
   const authHeader = req.headers["authorization"];
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return res.status(401).json({ error: "Missing Bearer token" });
   }
   const token = authHeader.split(" ")[1];
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded; // Contains { uid, email, role }
+    const decoded = await admin.auth().verifyIdToken(token);
+    req.user = decoded;
     next();
   } catch (err) {
     return res.status(401).json({ error: "Invalid or expired token" });
@@ -3139,39 +3118,31 @@ app.post("/auth/register", async (req, res) => {
   if (password.length < 6) {
     return res.status(400).json({ error: "Password must be at least 6 characters" });
   }
-
-  const usersDb = readUsersDb();
-  if (usersDb.users.find(u => u.email === email)) {
-    return res.status(409).json({ error: "An account with this email already exists." });
-  }
-
   try {
-    const uid = crypto.randomUUID();
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const verificationToken = crypto.randomBytes(32).toString("hex");
-
-    const newUser = {
-      uid,
+    const userRecord = await admin.auth().createUser({
       email,
-      password: hashedPassword,
+      password,
+      displayName: name || "",
+      emailVerified: false,
+    });
+
+    // Store profile in Firestore
+    const db = admin.firestore();
+    await db.collection("users").doc(userRecord.uid).set({
+      uid: userRecord.uid,
+      email: userRecord.email,
       name: name || "",
       avatar: "",
       role: "user",
-      emailVerified: false,
-      verificationToken,
       createdAt: new Date().toISOString(),
       lastLogin: null,
       metadata: metadata || {},
-    };
-
-    usersDb.users.push(newUser);
-    writeUsersDb(usersDb);
+    });
 
     // Send email verification
     try {
       if (transporter) {
-        // Create a generic verification link that would be handled by the frontend
-        const verifyLink = `${process.env.SERVER_BASE_URL || ""}/auth/verify?token=${verificationToken}`;
+        const verifyLink = await admin.auth().generateEmailVerificationLink(email);
         await transporter.sendMail({
           from: process.env.SMTP_FROM || process.env.SMTP_USER,
           to: email,
@@ -3187,64 +3158,65 @@ app.post("/auth/register", async (req, res) => {
             </div>`,
         });
       }
-    } catch (_) { /* Non-fatal */ }
-
-    // Omit password from response
-    const { password: _, verificationToken: __, ...profile } = newUser;
+    } catch (_) { /* Non-fatal: verification email might fail */ }
 
     res.status(201).json({
       success: true,
-      uid,
-      email,
+      uid: userRecord.uid,
+      email: userRecord.email,
       message: "Account created. Check your email to verify your address.",
-      profile
     });
   } catch (err) {
+    if (err.code === "auth/email-already-exists") {
+      return res.status(409).json({ error: "An account with this email already exists." });
+    }
     console.error("Register error:", err);
-    res.status(500).json({ error: "Registration failed" });
+    res.status(500).json({ error: err.message || "Registration failed" });
   }
 });
 
-// POST /auth/login — Sign in with email + password, returns JWT
+// POST /auth/login — Sign in with email + password, returns idToken
 app.post("/auth/login", async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
     return res.status(400).json({ error: "email and password are required" });
   }
-
-  const usersDb = readUsersDb();
-  const userIndex = usersDb.users.findIndex(u => u.email === email);
-  
-  if (userIndex === -1) {
-    return res.status(401).json({ error: "Invalid email or password." });
+  if (!FIREBASE_WEB_API_KEY) {
+    return res.status(503).json({ error: "FIREBASE_WEB_API_KEY is not configured on the server." });
   }
-
-  const user = usersDb.users[userIndex];
-  const isMatch = await bcrypt.compare(password, user.password);
-
-  if (!isMatch) {
-    return res.status(401).json({ error: "Invalid email or password." });
-  }
-
   try {
-    // Update lastLogin
-    user.lastLogin = new Date().toISOString();
-    usersDb.users[userIndex] = user;
-    writeUsersDb(usersDb);
-
-    // Generate JWT
-    const token = jwt.sign(
-      { uid: user.uid, email: user.email, role: user.role },
-      JWT_SECRET,
-      { expiresIn: "7d" }
+    const axios = require("axios");
+    const fbRes = await axios.post(
+      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_WEB_API_KEY}`,
+      { email, password, returnSecureToken: true },
+      { timeout: 8000 }
     );
+    const { idToken, localId: uid, expiresIn } = fbRes.data;
 
-    // Omit sensitive data
-    const { password: _, verificationToken: __, resetToken: ___, ...profile } = user;
+    // Update lastLogin in Firestore
+    try {
+      const db = admin.firestore();
+      await db.collection("users").doc(uid).update({ lastLogin: new Date().toISOString() });
+    } catch (_) {}
 
-    res.json({ success: true, token, expiresIn: "7d", uid: user.uid, profile });
+    // Fetch profile
+    let profile = {};
+    try {
+      const db = admin.firestore();
+      const doc = await db.collection("users").doc(uid).get();
+      if (doc.exists) profile = doc.data();
+    } catch (_) {}
+
+    res.json({ success: true, token: idToken, expiresIn, uid, profile });
   } catch (err) {
-    console.error("Login error:", err);
+    const code = err?.response?.data?.error?.message;
+    if (code === "EMAIL_NOT_FOUND" || code === "INVALID_PASSWORD" || code === "INVALID_LOGIN_CREDENTIALS") {
+      return res.status(401).json({ error: "Invalid email or password." });
+    }
+    if (code === "TOO_MANY_ATTEMPTS_TRY_LATER") {
+      return res.status(429).json({ error: "Too many failed attempts. Please try again later." });
+    }
+    console.error("Login error:", err?.response?.data || err.message);
     res.status(500).json({ error: "Login failed." });
   }
 });
@@ -3253,61 +3225,43 @@ app.post("/auth/login", async (req, res) => {
 app.post("/auth/forgot-password", async (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ error: "email is required" });
-
-  const usersDb = readUsersDb();
-  const userIndex = usersDb.users.findIndex(u => u.email === email);
-
-  if (userIndex !== -1) {
-    const resetToken = crypto.randomBytes(32).toString("hex");
-    usersDb.users[userIndex].resetToken = resetToken;
-    usersDb.users[userIndex].resetTokenExpiry = Date.now() + 3600000; // 1 hour
-    writeUsersDb(usersDb);
-
+  try {
+    const resetLink = await admin.auth().generatePasswordResetLink(email);
     if (transporter) {
-      try {
-        const resetLink = `${process.env.SERVER_BASE_URL || ""}/auth/reset-password?token=${resetToken}`;
-        await transporter.sendMail({
-          from: process.env.SMTP_FROM || process.env.SMTP_USER,
-          to: email,
-          subject: "Reset your password",
-          html: `
-            <div style="font-family: sans-serif; padding: 40px 20px; background: #f8fafc; text-align: center;">
-              <div style="max-width: 560px; margin: 0 auto; background: #fff; border-radius: 16px; padding: 40px; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
-                <h2 style="color: #ef4444; margin-top: 0;">Reset Your Password</h2>
-                <p style="color: #64748b;">We received a request to reset your password. Click the button below to choose a new one.</p>
-                <a href="${resetLink}" style="display:inline-block;background:#ef4444;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;margin-top:16px;">Reset Password</a>
-                <p style="color:#94a3b8;font-size:13px;margin-top:24px;">If you didn't request this, you can safely ignore this email.</p>
-              </div>
-            </div>`,
-        });
-      } catch (err) {
-        console.error("Failed to send reset email:", err);
-      }
+      await transporter.sendMail({
+        from: process.env.SMTP_FROM || process.env.SMTP_USER,
+        to: email,
+        subject: "Reset your password",
+        html: `
+          <div style="font-family: sans-serif; padding: 40px 20px; background: #f8fafc; text-align: center;">
+            <div style="max-width: 560px; margin: 0 auto; background: #fff; border-radius: 16px; padding: 40px; box-shadow: 0 4px 12px rgba(0,0,0,0.08);">
+              <h2 style="color: #ef4444; margin-top: 0;">Reset Your Password</h2>
+              <p style="color: #64748b;">We received a request to reset your password. Click the button below to choose a new one.</p>
+              <a href="${resetLink}" style="display:inline-block;background:#ef4444;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;margin-top:16px;">Reset Password</a>
+              <p style="color:#94a3b8;font-size:13px;margin-top:24px;">If you didn't request this, you can safely ignore this email.</p>
+            </div>
+          </div>`,
+      });
     }
+    res.json({ success: true, message: "Password reset email sent." });
+  } catch (err) {
+    if (err.code === "auth/user-not-found") {
+      // Return success anyway to prevent email enumeration
+      return res.json({ success: true, message: "Password reset email sent." });
+    }
+    console.error("Forgot password error:", err);
+    res.status(500).json({ error: "Failed to send password reset email." });
   }
-
-  // Always return success to prevent email enumeration
-  res.json({ success: true, message: "Password reset email sent." });
 });
 
 // POST /auth/verify-email — (Re)send an email verification link
 app.post("/auth/verify-email", requireUserAuth, async (req, res) => {
-  const usersDb = readUsersDb();
-  const userIndex = usersDb.users.findIndex(u => u.uid === req.user.uid);
-  
-  if (userIndex === -1) return res.status(404).json({ error: "User not found." });
-  const user = usersDb.users[userIndex];
-
   try {
-    const verificationToken = crypto.randomBytes(32).toString("hex");
-    user.verificationToken = verificationToken;
-    writeUsersDb(usersDb);
-
+    const verifyLink = await admin.auth().generateEmailVerificationLink(req.user.email);
     if (transporter) {
-      const verifyLink = `${process.env.SERVER_BASE_URL || ""}/auth/verify?token=${verificationToken}`;
       await transporter.sendMail({
         from: process.env.SMTP_FROM || process.env.SMTP_USER,
-        to: user.email,
+        to: req.user.email,
         subject: "Verify your email address",
         html: `<div style="font-family:sans-serif;padding:40px 20px;background:#f8fafc;text-align:center;"><div style="max-width:560px;margin:0 auto;background:#fff;border-radius:16px;padding:40px;"><h2 style="color:#4f46e5;margin-top:0;">Verify Your Email</h2><p style="color:#64748b;">Click below to verify your email address.</p><a href="${verifyLink}" style="display:inline-block;background:#4f46e5;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;margin-top:16px;">Verify Email</a></div></div>`,
       });
@@ -3319,23 +3273,22 @@ app.post("/auth/verify-email", requireUserAuth, async (req, res) => {
 });
 
 // GET /auth/me — Get the current user's profile
-app.get("/auth/me", requireUserAuth, (req, res) => {
-  const usersDb = readUsersDb();
-  const user = usersDb.users.find(u => u.uid === req.user.uid);
-  if (!user) return res.status(404).json({ error: "User profile not found." });
-  
-  const { password: _, verificationToken: __, resetToken: ___, ...profile } = user;
-  res.json({ success: true, profile });
+app.get("/auth/me", requireUserAuth, async (req, res) => {
+  try {
+    const db = admin.firestore();
+    const doc = await db.collection("users").doc(req.user.uid).get();
+    if (!doc.exists) {
+      return res.status(404).json({ error: "User profile not found." });
+    }
+    res.json({ success: true, profile: doc.data() });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to fetch profile." });
+  }
 });
 
 // PUT /auth/me — Update the current user's profile
-app.put("/auth/me", requireUserAuth, (req, res) => {
+app.put("/auth/me", requireUserAuth, async (req, res) => {
   const { name, avatar, metadata } = req.body;
-  
-  const usersDb = readUsersDb();
-  const userIndex = usersDb.users.findIndex(u => u.uid === req.user.uid);
-  if (userIndex === -1) return res.status(404).json({ error: "User not found." });
-
   const updates = {};
   if (name !== undefined) updates.name = name;
   if (avatar !== undefined) updates.avatar = avatar;
@@ -3344,60 +3297,58 @@ app.put("/auth/me", requireUserAuth, (req, res) => {
   if (Object.keys(updates).length === 0) {
     return res.status(400).json({ error: "No fields to update provided." });
   }
-
-  usersDb.users[userIndex] = { ...usersDb.users[userIndex], ...updates };
-  writeUsersDb(usersDb);
-
-  res.json({ success: true, updated: updates });
+  try {
+    const db = admin.firestore();
+    await db.collection("users").doc(req.user.uid).update(updates);
+    if (name) {
+      await admin.auth().updateUser(req.user.uid, { displayName: name });
+    }
+    res.json({ success: true, updated: updates });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to update profile." });
+  }
 });
 
 // DELETE /auth/me — Delete the current user's own account
-app.delete("/auth/me", requireUserAuth, (req, res) => {
-  const usersDb = readUsersDb();
-  const initialLength = usersDb.users.length;
-  usersDb.users = usersDb.users.filter(u => u.uid !== req.user.uid);
-  
-  if (usersDb.users.length === initialLength) {
-    return res.status(404).json({ error: "User not found." });
+app.delete("/auth/me", requireUserAuth, async (req, res) => {
+  try {
+    const db = admin.firestore();
+    await db.collection("users").doc(req.user.uid).delete();
+    await admin.auth().deleteUser(req.user.uid);
+    res.json({ success: true, message: "Account deleted." });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to delete account." });
   }
-  
-  writeUsersDb(usersDb);
-  res.json({ success: true, message: "Account deleted." });
 });
 
 // GET /admin/users — List all users (api-key protected)
-app.get("/admin/users", requireAuth, (req, res) => {
-  const limit = parseInt(req.query.limit) || 50;
-  const usersDb = readUsersDb();
-  
-  // Sort descending by creation date
-  const sortedUsers = [...usersDb.users].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  const subset = sortedUsers.slice(0, limit).map(u => {
-    const { password: _, verificationToken: __, resetToken: ___, ...safeProfile } = u;
-    return safeProfile;
-  });
-
-  res.json({ success: true, count: subset.length, total: usersDb.users.length, users: subset });
+app.get("/admin/users", requireAuth, async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 50;
+    const db = admin.firestore();
+    const snapshot = await db.collection("users").orderBy("createdAt", "desc").limit(limit).get();
+    const users = snapshot.docs.map(doc => doc.data());
+    res.json({ success: true, count: users.length, users });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to list users." });
+  }
 });
 
 // GET /admin/users/:uid — Get a specific user
-app.get("/admin/users/:uid", requireAuth, (req, res) => {
-  const usersDb = readUsersDb();
-  const user = usersDb.users.find(u => u.uid === req.params.uid);
-  if (!user) return res.status(404).json({ error: "User not found." });
-  
-  const { password: _, verificationToken: __, resetToken: ___, ...profile } = user;
-  res.json({ success: true, profile });
+app.get("/admin/users/:uid", requireAuth, async (req, res) => {
+  try {
+    const db = admin.firestore();
+    const doc = await db.collection("users").doc(req.params.uid).get();
+    if (!doc.exists) return res.status(404).json({ error: "User not found." });
+    res.json({ success: true, profile: doc.data() });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to get user." });
+  }
 });
 
 // PUT /admin/users/:uid — Update any user's profile or role
-app.put("/admin/users/:uid", requireAuth, (req, res) => {
+app.put("/admin/users/:uid", requireAuth, async (req, res) => {
   const { name, avatar, role, metadata } = req.body;
-  
-  const usersDb = readUsersDb();
-  const userIndex = usersDb.users.findIndex(u => u.uid === req.params.uid);
-  if (userIndex === -1) return res.status(404).json({ error: "User not found." });
-
   const updates = {};
   if (name !== undefined) updates.name = name;
   if (avatar !== undefined) updates.avatar = avatar;
@@ -3407,25 +3358,26 @@ app.put("/admin/users/:uid", requireAuth, (req, res) => {
   if (Object.keys(updates).length === 0) {
     return res.status(400).json({ error: "No fields to update provided." });
   }
-
-  usersDb.users[userIndex] = { ...usersDb.users[userIndex], ...updates };
-  writeUsersDb(usersDb);
-
-  res.json({ success: true, updated: updates });
+  try {
+    const db = admin.firestore();
+    await db.collection("users").doc(req.params.uid).update(updates);
+    if (name) await admin.auth().updateUser(req.params.uid, { displayName: name });
+    res.json({ success: true, updated: updates });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to update user." });
+  }
 });
 
 // DELETE /admin/users/:uid — Delete any user
-app.delete("/admin/users/:uid", requireAuth, (req, res) => {
-  const usersDb = readUsersDb();
-  const initialLength = usersDb.users.length;
-  usersDb.users = usersDb.users.filter(u => u.uid !== req.params.uid);
-  
-  if (usersDb.users.length === initialLength) {
-    return res.status(404).json({ error: "User not found." });
+app.delete("/admin/users/:uid", requireAuth, async (req, res) => {
+  try {
+    const db = admin.firestore();
+    await db.collection("users").doc(req.params.uid).delete();
+    await admin.auth().deleteUser(req.params.uid);
+    res.json({ success: true, message: "User deleted." });
+  } catch (err) {
+    res.status(500).json({ error: "Failed to delete user." });
   }
-  
-  writeUsersDb(usersDb);
-  res.json({ success: true, message: "User deleted." });
 });
 
 // =====================

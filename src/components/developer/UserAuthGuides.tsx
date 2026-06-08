@@ -19,9 +19,19 @@ export function UserAuthGuides({ config, handleCopy, copied }: {
           User Auth Database — Connect From Any Website
         </h2>
         <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
-          Full user registration, login, profile management — backed by a fully local JSON database, bcryptjs, and JWT. 
+          Full user registration, login, profile management — backed by Firebase Auth + Firestore. 
           Drop this into any website, app, or script.
         </p>
+
+        {/* Setup note */}
+        <div className="rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 text-sm">
+          <p className="font-semibold text-amber-700 dark:text-amber-400 mb-1">⚙️ One-time setup required</p>
+          <p className="text-amber-700 dark:text-amber-300 text-xs">
+            The <code className="font-mono bg-amber-100 dark:bg-amber-900/50 px-1 rounded">/auth/login</code> endpoint requires your <strong>Firebase Web API Key</strong>.
+            Find it in <strong>Firebase Console → Project Settings → General → Web API Key</strong>, then add it to your server&apos;s <code className="font-mono bg-amber-100 dark:bg-amber-900/50 px-1 rounded">.env.local</code>:
+          </p>
+          <pre className="mt-2 rounded bg-amber-100 dark:bg-amber-900/50 p-2 text-xs font-mono text-amber-800 dark:text-amber-300">FIREBASE_WEB_API_KEY=AIzaSyXXXXXXXXXXXXXXXXXXX</pre>
+        </div>
 
         {/* Endpoint table */}
         <div className="mt-5 overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
@@ -47,7 +57,7 @@ export function UserAuthGuides({ config, handleCopy, copied }: {
                 { method: "PUT", path: "/admin/users/:uid", auth: "x-api-key", desc: "Update any user" },
                 { method: "DELETE", path: "/admin/users/:uid", auth: "x-api-key", desc: "Delete any user" },
               ].map(row => (
-                <tr key={row.path}>
+                <tr key={row.method + row.path}>
                   <td className="px-3 py-2">
                     <span className={`rounded px-1.5 py-0.5 text-xs font-bold font-mono ${row.method === "GET" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400" : row.method === "DELETE" ? "bg-red-100 text-red-700 dark:bg-red-950/50 dark:text-red-400" : "bg-blue-100 text-blue-700 dark:bg-blue-950/50 dark:text-blue-400"}`}>
                       {row.method}
@@ -103,7 +113,7 @@ export function UserAuthGuides({ config, handleCopy, copied }: {
             {copied === "auth-login" ? "✓ Copied!" : "Copy"}
           </button>
         </div>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Returns a secure JWT Token. Save it — use it as <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 rounded">Authorization: Bearer &lt;token&gt;</code> on protected requests.</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">Returns a Firebase ID token. Save it — use it as <code className="font-mono bg-slate-100 dark:bg-slate-800 px-1 rounded">Authorization: Bearer &lt;token&gt;</code> on protected requests.</p>
         <pre className="rounded-lg bg-slate-900 p-4 text-sm text-slate-50 overflow-x-auto border border-slate-800">
           <code>{`fetch("${base}/auth/login", {
   method: "POST",
