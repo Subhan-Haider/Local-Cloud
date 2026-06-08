@@ -1,11 +1,12 @@
 "use client";
 
-import { Folder, X } from "lucide-react";
+import { Folder, X, Download } from "lucide-react";
 
 interface FolderViewProps {
   folders: { name: string; count: number }[];
   activeFolder: string | null;
   onSelectFolder: (folder: string | null) => void;
+  onDownloadFolder?: (folder: string) => void;
 }
 
 const FOLDER_COLORS = [
@@ -26,7 +27,7 @@ const FOLDER_ICON_COLORS = [
   "text-indigo-500",
 ];
 
-export function FolderView({ folders, activeFolder, onSelectFolder }: FolderViewProps) {
+export function FolderView({ folders, activeFolder, onSelectFolder, onDownloadFolder }: FolderViewProps) {
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
@@ -67,6 +68,20 @@ export function FolderView({ folders, activeFolder, onSelectFolder }: FolderView
                   {folder.count} {folder.count === 1 ? "file" : "files"}
                 </p>
               </div>
+              {onDownloadFolder && (
+                <div
+                  role="button"
+                  tabIndex={0}
+                  className="ml-1 hidden p-1.5 rounded-md hover:bg-black/5 dark:hover:bg-white/10 transition-colors group-hover:block"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDownloadFolder(folder.name);
+                  }}
+                  title="Download Folder"
+                >
+                  <Download className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                </div>
+              )}
             </button>
           );
         })}

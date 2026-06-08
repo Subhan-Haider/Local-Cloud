@@ -10,7 +10,7 @@ import { RenameModal } from "@/components/files/RenameModal";
 import { MoveModal } from "@/components/files/MoveModal";
 import { api, FileData } from "@/lib/api";
 import { useToast } from "@/components/ui/ToastProvider";
-import { LayoutGrid, List, Trash2, Filter } from "lucide-react";
+import { LayoutGrid, List, Trash2, Filter, Download } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 
 export default function FilesPage() {
@@ -94,6 +94,27 @@ export default function FilesPage() {
     }
   };
 
+  const handleBulkDownload = async () => {
+    try {
+      const filesToZip = selectedFiles.map(key => {
+        const slashIdx = key.indexOf("/");
+        return { folder: key.slice(0, slashIdx), name: key.slice(slashIdx + 1) };
+      });
+      success(`Zipping ${filesToZip.length} file(s)...`);
+      const blob = await api.zipFiles(filesToZip, "selected-files");
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "selected-files.zip";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      toastError("Failed to download selected files");
+    }
+  };
+
   const handleDelete = async (folder: string, name: string) => {
     if (!confirm("Delete this file?")) return;
     try {
@@ -115,6 +136,28 @@ export default function FilesPage() {
     }
   };
 
+  const handleDownloadFolder = async (folder: string) => {
+    try {
+      const folderFiles = files.filter(f => f.folder === folder).map(f => ({ folder: f.folder, name: f.name }));
+      if (folderFiles.length === 0) {
+        toastError("Folder is empty");
+        return;
+      }
+      success(`Zipping ${folderFiles.length} files...`);
+      const blob = await api.zipFiles(folderFiles, folder);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${folder}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      toastError("Failed to download folder");
+    }
+  };
+
   return (
     <>
       <Topbar onRefresh={loadData} />
@@ -124,7 +167,7 @@ export default function FilesPage() {
           <p className="text-sm text-gray-500 dark:text-gray-400">Manage all your uploaded files.</p>
         </div>
 
-        <FolderView folders={foldersList} activeFolder={activeFolder} onSelectFolder={setActiveFolder} />
+        <FolderView folders={foldersList} activeFolder={activeFolder} onSelectFolder={setActiveFolder} onDownloadFolder={handleDownloadFolder} />
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           {/* Filters */}
@@ -151,13 +194,22 @@ export default function FilesPage() {
           {/* Controls */}
           <div className="flex items-center gap-3">
             {selectedFiles.length > 0 && (
-              <button
-                onClick={handleBulkDelete}
-                className="flex items-center gap-1.5 rounded-lg bg-red-50 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-100 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50 transition-colors"
-              >
-                <Trash2 className="h-4 w-4" />
-                Delete ({selectedFiles.length})
-              </button>
+              <>
+                <button
+                  onClick={handleBulkDownload}
+                  className="flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-1.5 text-sm font-medium text-emerald-600 hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400 dark:hover:bg-emerald-950/50 transition-colors"
+                >
+                  <Download className="h-4 w-4" />
+                  Download ({selectedFiles.length})
+                </button>
+                <button
+                  onClick={handleBulkDelete}
+                  className="flex items-center gap-1.5 rounded-lg bg-red-50 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-100 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50 transition-colors"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete ({selectedFiles.length})
+                </button>
+              </>
             )}
 
             <button

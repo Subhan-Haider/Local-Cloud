@@ -1215,14 +1215,19 @@ app.post("/rename", requireAuth, (req, res) => {
   const { oldPath, newPath } = req.body;
   if (!oldPath || !newPath) return res.status(400).json({ error: "oldPath and newPath required" });
 
-  const absoluteOld = path.join(UPLOAD_PATH, oldPath);
-  const absoluteNew = path.join(UPLOAD_PATH, newPath);
+  const resolvedUploadPath = path.resolve(UPLOAD_PATH);
+  const absoluteOld = path.resolve(path.join(UPLOAD_PATH, oldPath));
+  const absoluteNew = path.resolve(path.join(UPLOAD_PATH, newPath));
 
-  if (!absoluteOld.startsWith(UPLOAD_PATH) || !absoluteNew.startsWith(UPLOAD_PATH)) {
+  if (!absoluteOld.startsWith(resolvedUploadPath) || !absoluteNew.startsWith(resolvedUploadPath)) {
     return res.status(403).json({ error: "Invalid path" });
   }
 
-  if (fs.existsSync(absoluteOld)) {
+  if (!fs.existsSync(absoluteOld)) {
+    return res.status(404).json({ error: "Source not found" });
+  }
+
+  try {
     fs.renameSync(absoluteOld, absoluteNew);
 
     const db = readDb();
@@ -1233,12 +1238,24 @@ app.post("/rename", requireAuth, (req, res) => {
       db.files[newKey] = db.files[oldKey];
       delete db.files[oldKey];
       writeDb(db);
+    } else {
+      writeDb(db); // Rebuild cache even if no meta entry
+    }
+
+    // Also rename thumbnail if it exists
+    const oldFileName = path.basename(oldPath);
+    const newFileName = path.basename(newPath);
+    const oldThumb = path.join(THUMBNAIL_PATH, `${oldFileName}-thumb.webp`);
+    const newThumb = path.join(THUMBNAIL_PATH, `${newFileName}-thumb.webp`);
+    if (fs.existsSync(oldThumb)) {
+      try { fs.renameSync(oldThumb, newThumb); } catch (e) { /* non-fatal */ }
     }
 
     logEvent("FILE_RENAME", { oldPath, newPath });
     res.json({ success: true, message: "Renamed successfully" });
-  } else {
-    res.status(404).json({ error: "Source not found" });
+  } catch (err) {
+    console.error("Rename error:", err);
+    res.status(500).json({ error: "Failed to rename file: " + err.message });
   }
 });
 
