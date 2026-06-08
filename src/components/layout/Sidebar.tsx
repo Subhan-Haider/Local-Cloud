@@ -13,7 +13,8 @@ import {
   Settings,
   HardDrive,
   Menu,
-  Code
+  Code,
+  Terminal
 } from "lucide-react";
 
 const navigation = [
@@ -99,6 +100,34 @@ export function Sidebar() {
               </Link>
             );
           })}
+
+          {/* Python Studio */}
+          <div className="mt-4 pt-4 border-t border-slate-200/60 dark:border-slate-800/60">
+            <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+              Tools
+            </p>
+            <Link
+              href="/python-studio"
+              onClick={() => setIsOpen(false)}
+              className={cn(
+                "group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150",
+                pathname === "/python-studio"
+                  ? "bg-yellow-50 text-yellow-700 dark:bg-yellow-950/30 dark:text-yellow-300"
+                  : "text-gray-600 hover:bg-yellow-50/60 hover:text-yellow-700 dark:text-gray-400 dark:hover:bg-yellow-950/20 dark:hover:text-yellow-300"
+              )}
+            >
+              <Terminal
+                className={cn(
+                  "h-4.5 w-4.5 shrink-0 transition-colors",
+                  pathname === "/python-studio"
+                    ? "text-yellow-500"
+                    : "text-gray-400 group-hover:text-yellow-500"
+                )}
+              />
+              Python Studio
+              <span className="ml-auto rounded-full bg-yellow-400/20 px-1.5 py-0.5 text-[9px] font-bold text-yellow-500 dark:text-yellow-400">NEW</span>
+            </Link>
+          </div>
         </nav>
 
         {/* Storage indicator at bottom */}

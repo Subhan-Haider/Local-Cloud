@@ -217,6 +217,15 @@ export const api = {
     await apiInstance.delete("/admin/folder", { data: { folder } });
   },
 
+  createFolder: async (folder: string): Promise<void> => {
+    await apiInstance.post("/admin/create-folder", { folder });
+  },
+
+  getFolderFiles: async (folder: string): Promise<FileData[]> => {
+    const { data } = await apiInstance.get(`/admin/folder/${folder}`);
+    return data;
+  },
+
   renameFolder: async (oldName: string, newName: string): Promise<void> => {
     await apiInstance.post("/admin/rename-folder", { oldName, newName });
   },
@@ -250,6 +259,11 @@ export const api = {
 
   saveFileContent: async (folder: string, name: string, content: string): Promise<void> => {
     await apiInstance.post("/admin/save-file", { folder, name, content });
+  },
+
+  runPython: async (folder: string, name: string): Promise<{ output: string; error: string; exitCode: number }> => {
+    const { data } = await apiInstance.post("/admin/run-python", { folder, name });
+    return data;
   },
 
   cleanupStorage: async (): Promise<{ orphansRemoved: number }> => {
@@ -403,6 +417,41 @@ export const api = {
     logout: async (): Promise<void> => {
       await apiInstance.post("/api/auth/logout", {}, { withCredentials: true });
     },
+  },
+
+  // ── Python Studio ────────────────────────────────────────────────────────────
+  /** List all files in a specific folder */
+  getFolderFiles: async (folder: string): Promise<FileData[]> => {
+    const { data } = await apiInstance.get("/admin/files");
+    return (data as FileData[])
+      .filter((f: FileData) => f.folder === folder)
+      .map((f: FileData) => ({
+        ...f,
+        url: f.url.startsWith("http") ? f.url : `${API_BASE}${f.url}`,
+        thumbnailUrl: f.thumbnailUrl
+          ? f.thumbnailUrl.startsWith("http") ? f.thumbnailUrl : `${API_BASE}${f.thumbnailUrl}`
+          : null,
+      }));
+  },
+
+  /** Fetch the raw text content of a file (authenticated) */
+  getFileContent: async (folder: string, name: string): Promise<string> => {
+    const { data } = await apiInstance.get("/admin/file-content", {
+      params: { folder, name },
+      responseType: "text",
+    });
+    return typeof data === "string" ? data : JSON.stringify(data);
+  },
+
+  /** Save/overwrite the text content of a file */
+  saveFileContent: async (folder: string, name: string, content: string): Promise<void> => {
+    await apiInstance.post("/admin/save-file", { folder, name, content });
+  },
+
+  /** Execute a Python file on the server */
+  runPython: async (folder: string, name: string): Promise<{ output: string; error: string; exitCode: number }> => {
+    const { data } = await apiInstance.post("/admin/run-python", { folder, name });
+    return data;
   },
 };
 

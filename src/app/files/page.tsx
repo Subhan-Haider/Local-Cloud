@@ -133,8 +133,13 @@ export default function FilesPage() {
               <option value="all">All Types</option>
               <option value="image">Images</option>
               <option value="video">Videos</option>
+              <option value="audio">Audio</option>
               <option value="pdf">PDFs</option>
               <option value="document">Documents</option>
+              <option value="code">Code</option>
+              <option value="archive">Archives</option>
+              <option value="installer">Installers</option>
+              <option value="unknown">Other</option>
             </select>
           </div>
 

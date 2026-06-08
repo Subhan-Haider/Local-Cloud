@@ -6,7 +6,7 @@ const fs = require("fs");
 const path = require("path");
 const rateLimit = require("express-rate-limit");
 const crypto = require("crypto");
-const { exec } = require("child_process");
+const { exec, spawn } = require("child_process");
 const archiver = require("archiver");
 const nodemailer = require("nodemailer");
 const admin = require("./firebase-admin");
@@ -1734,6 +1734,32 @@ app.post("/admin/copy-file", requireAuth, (req, res) => {
   res.json({ success: true, newName: copyName, folder: destinationFolder });
 });
 
+// 15a. GET FILE CONTENT
+app.get("/admin/file-content", requireAuth, (req, res) => {
+  const { folder, name } = req.query;
+  if (!name) return res.status(400).json({ error: "Missing parameters" });
+
+  const filePath = folder && folder !== "root"
+    ? path.join(UPLOAD_PATH, folder, name)
+    : path.join(UPLOAD_PATH, name);
+
+  if (!filePath.startsWith(UPLOAD_PATH)) {
+    return res.status(403).json({ error: "Invalid path" });
+  }
+
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: "File not found" });
+  }
+
+  try {
+    const content = fs.readFileSync(filePath, "utf8");
+    res.send(content);
+  } catch (err) {
+    console.error("Read file error:", err);
+    res.status(500).json({ error: "Failed to read file" });
+  }
+});
+
 // 15b. SAVE FILE CONTENT
 app.post("/admin/save-file", requireAuth, (req, res) => {
   const { folder, name, content } = req.body;
@@ -1758,6 +1784,60 @@ app.post("/admin/save-file", requireAuth, (req, res) => {
     console.error("Save file error:", err);
     res.status(500).json({ error: "Failed to save file" });
   }
+});
+
+// 15c. RUN PYTHON FILE (server-side execution)
+app.post("/admin/run-python", requireAuth, (req, res) => {
+  const { folder, name } = req.body;
+  if (!name) return res.status(400).json({ error: "Missing parameters" });
+
+  const filePath = folder && folder !== "root"
+    ? path.join(UPLOAD_PATH, folder, name)
+    : path.join(UPLOAD_PATH, name);
+
+  if (!filePath.startsWith(UPLOAD_PATH))
+    return res.status(403).json({ error: "Invalid path" });
+  if (!fs.existsSync(filePath))
+    return res.status(404).json({ error: "File not found" });
+
+  const pythonCmd = process.platform === "win32" ? "python" : "python3";
+  let stdout = "";
+  let stderr = "";
+  let finished = false;
+
+  const proc = spawn(pythonCmd, [filePath], {
+    env: { ...process.env, PYGAME_HIDE_SUPPORT_PROMPT: "1" },
+    timeout: 15000
+  });
+
+  proc.stdout.on("data", (data) => { stdout += data.toString(); });
+  proc.stderr.on("data", (data) => { stderr += data.toString(); });
+
+  const finish = (exitCode) => {
+    if (finished) return;
+    finished = true;
+    logEvent("PYTHON_RUN", { folder, name, exitCode });
+    res.json({ output: stdout, error: stderr, exitCode });
+  };
+
+  proc.on("close", finish);
+  proc.on("error", (err) => {
+    if (finished) return;
+    finished = true;
+    if (err.code === "ENOENT") {
+      res.status(500).json({ error: "Python is not installed on the server." });
+    } else {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Hard timeout
+  setTimeout(() => {
+    if (!finished) {
+      proc.kill("SIGKILL");
+      finish(-1);
+    }
+  }, 15000);
 });
 
 // 16. SEARCH FILES
@@ -2372,6 +2452,42 @@ app.post("/admin/cache-refresh", requireAuth, async (req, res) => {
   try {
     await rebuildFileCache();
     res.json({ success: true, cachedFiles: fileCache.length, message: "Cache rebuilt successfully" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// CREATE FOLDER
+app.post("/admin/create-folder", requireAuth, (req, res) => {
+  try {
+    const { folder } = req.body;
+    if (!folder) return res.status(400).json({ error: "Folder name required" });
+    
+    const db = readDb();
+    if (!db.folders) db.folders = {};
+    if (!db.folders[folder]) {
+      db.folders[folder] = { createdAt: new Date().toISOString() };
+      writeDb(db);
+    }
+    
+    // Also create physical directory
+    const physicalPath = path.join(UPLOAD_PATH, folder);
+    if (!fs.existsSync(physicalPath)) {
+      fs.mkdirSync(physicalPath, { recursive: true });
+    }
+    
+    res.json({ success: true, folder });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET FILES FOR FOLDER
+app.get("/admin/folder/:folder", requireAuth, (req, res) => {
+  try {
+    const { folder } = req.params;
+    const files = fileCache.filter(f => f.folder === folder);
+    res.json(files);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

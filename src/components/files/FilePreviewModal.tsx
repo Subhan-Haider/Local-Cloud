@@ -5,7 +5,7 @@ import {
   X, Download, Copy, Check, FileText, Archive, Music, Code2,
   Tag, Hash, Calendar, Info, AlignLeft, ChevronRight, Eye, Smartphone
 } from "lucide-react";
-import { FileData } from "@/lib/api";
+import { FileData, api } from "@/lib/api";
 import { auth } from "@/lib/firebase";
 
 interface FilePreviewModalProps {
@@ -71,6 +71,8 @@ export function FilePreviewModal({ file, onClose }: FilePreviewModalProps) {
   const [loadingCode, setLoadingCode] = useState(false);
   const [savingCode, setSavingCode] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [runningPython, setRunningPython] = useState(false);
+  const [pythonResult, setPythonResult] = useState<{ output: string; error: string; exitCode: number } | null>(null);
   const [copied, setCopied] = useState(false);
   const [previewMode, setPreviewMode] = useState<"preview" | "code" | "rendered" | "pyscript">("preview");
   const [showInfo, setShowInfo] = useState(false);
@@ -284,37 +286,85 @@ export function FilePreviewModal({ file, onClose }: FilePreviewModalProps) {
           );
         }
 
-        // ── PYTHON/PYSCRIPT RUNNER ──
+        // ── PYTHON SERVER-SIDE RUNNER ──
         if (isPython && previewMode === "pyscript") {
-          const pyScriptHtml = `
-<!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>PyScript App</title>
-    <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css" />
-    <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
-    <style>
-      body { margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; background-color: #0f172a; color: white; font-family: monospace; }
-      #terminal { padding: 20px; width: 100%; height: 100%; box-sizing: border-box; }
-    </style>
-  </head>
-  <body>
-    <script type="py" config='{"packages":["pygame-ce"]}'>
-${codeContent}
-    </script>
-  </body>
-</html>`;
+          const handleRunPython = async () => {
+            setRunningPython(true);
+            setPythonResult(null);
+            try {
+              const result = await api.runPython(file.folder, file.name);
+              setPythonResult(result);
+            } catch (e: unknown) {
+              const msg = e instanceof Error ? e.message : "Unknown error";
+              setPythonResult({ output: "", error: msg, exitCode: -1 });
+            } finally {
+              setRunningPython(false);
+            }
+          };
+
           return (
-            <div className="flex flex-col gap-3 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+            <div className="flex flex-col rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
               <div className="flex items-center justify-between border-b border-slate-200 bg-slate-100 px-4 py-2 dark:border-slate-700 dark:bg-slate-800">
                 <div className="flex items-center gap-2">
-                  <button onClick={() => setPreviewMode("pyscript")} className={`rounded-md px-3 py-1 text-xs font-semibold transition-colors bg-indigo-600 text-white`}>Run Python</button>
-                  <button onClick={() => setPreviewMode("code")} className={`rounded-md px-3 py-1 text-xs font-semibold transition-colors text-gray-600 dark:text-gray-300 hover:bg-slate-200 dark:hover:bg-slate-700`}>Source Code</button>
+                  <button onClick={() => setPreviewMode("pyscript")} className="rounded-md px-3 py-1 text-xs font-semibold bg-indigo-600 text-white">&#9654; Run Python</button>
+                  <button onClick={() => setPreviewMode("code")} className="rounded-md px-3 py-1 text-xs font-semibold text-gray-600 dark:text-gray-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">Source Code</button>
+                </div>
+                <span className="text-[10px] text-slate-400">Runs on server · stdout captured</span>
+              </div>
+              <div className="flex flex-col bg-[#0d1117] min-h-[55vh] max-h-[65vh] overflow-hidden">
+                {/* Toolbar */}
+                <div className="flex items-center gap-3 border-b border-slate-800 px-4 py-2.5 bg-[#161b22]">
+                  <button
+                    onClick={handleRunPython}
+                    disabled={runningPython}
+                    className="flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 px-4 py-1.5 text-xs font-bold text-white transition-colors"
+                  >
+                    {runningPython ? (
+                      <><span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-white/30 border-t-white" />Running...</>
+                    ) : (
+                      <>&#9654; Run</>  
+                    )}
+                  </button>
+                  {pythonResult && (
+                    <>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        pythonResult.exitCode === 0 ? "bg-emerald-900/50 text-emerald-400" : "bg-red-900/50 text-red-400"
+                      }`}>
+                        Exit {pythonResult.exitCode === -1 ? "Timeout" : pythonResult.exitCode}
+                      </span>
+                      <button onClick={() => setPythonResult(null)} className="ml-auto text-[10px] text-slate-500 hover:text-slate-300 transition-colors">Clear</button>
+                    </>
+                  )}
+                </div>
+
+                {/* Output terminal */}
+                <div className="flex-1 overflow-auto p-4 font-mono text-sm leading-relaxed">
+                  {!pythonResult && !runningPython && (
+                    <p className="text-slate-500 text-xs">Press &#9654; Run to execute the script on the server. Output (stdout/stderr) will appear here.</p>
+                  )}
+                  {runningPython && (
+                    <p className="text-slate-400 text-xs animate-pulse">Executing {file.name}...</p>
+                  )}
+                  {pythonResult && (
+                    <>
+                      {pythonResult.output && (
+                        <pre className="text-emerald-400 whitespace-pre-wrap break-words">{pythonResult.output}</pre>
+                      )}
+                      {pythonResult.error && (
+                        <pre className="text-red-400 whitespace-pre-wrap break-words mt-2">{pythonResult.error}</pre>
+                      )}
+                      {!pythonResult.output && !pythonResult.error && (
+                        <p className="text-slate-500 text-xs">Script finished with no output.</p>
+                      )}
+                    </>
+                  )}
+                </div>
+
+                {/* Note for pygame */}
+                <div className="shrink-0 border-t border-slate-800 px-4 py-2 bg-[#161b22]">
+                  <p className="text-[10px] text-slate-500">&#9888; pygame/GUI windows open on the server and are not visible here. Only stdout/stderr output is captured.</p>
                 </div>
               </div>
-              <iframe srcDoc={pyScriptHtml} className="h-[65vh] w-full bg-[#0f172a] rounded-b-lg border-0" title={file.name} sandbox="allow-scripts allow-same-origin" />
             </div>
           );
         }
