@@ -228,6 +228,18 @@ export const api = {
     return data;
   },
 
+  bulkTogglePin: async (files: { folder: string; name: string }[], isPinned: boolean): Promise<void> => {
+    await apiInstance.post("/admin/bulk-pin", { files, isPinned });
+  },
+
+  bulkTogglePrivacy: async (files: { folder: string; name: string }[], isPublic: boolean): Promise<void> => {
+    await apiInstance.post("/admin/bulk-privacy", { files, isPublic });
+  },
+
+  bulkSetExpiry: async (files: { folder: string; name: string }[], expiresAt: string | null): Promise<void> => {
+    await apiInstance.post("/admin/bulk-expiry", { files, expiresAt });
+  },
+
   deleteFolder: async (folder: string): Promise<void> => {
     await apiInstance.delete("/admin/folder", { data: { folder } });
   },

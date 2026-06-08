@@ -1773,6 +1773,48 @@ app.post("/admin/bulk-delete", requireAuth, (req, res) => {
   res.json({ success: true, deleted, errors });
 });
 
+// BULK TOGGLE PIN
+app.post("/admin/bulk-pin", requireAuth, (req, res) => {
+  const { files, isPinned } = req.body;
+  if (!Array.isArray(files)) return res.status(400).json({ error: "Files array required" });
+  const db = readDb();
+  files.forEach(({ folder, name }) => {
+    const key = `${folder || "root"}/${name}`;
+    if (db.files[key]) db.files[key].isPinned = isPinned;
+  });
+  writeDb(db);
+  logEvent("BULK_TOGGLE_PIN", { count: files.length, isPinned });
+  res.json({ success: true });
+});
+
+// BULK TOGGLE PRIVACY
+app.post("/admin/bulk-privacy", requireAuth, (req, res) => {
+  const { files, isPublic } = req.body;
+  if (!Array.isArray(files)) return res.status(400).json({ error: "Files array required" });
+  const db = readDb();
+  files.forEach(({ folder, name }) => {
+    const key = `${folder || "root"}/${name}`;
+    if (db.files[key]) db.files[key].isPublic = isPublic;
+  });
+  writeDb(db);
+  logEvent("BULK_TOGGLE_PRIVACY", { count: files.length, isPublic });
+  res.json({ success: true });
+});
+
+// BULK SET EXPIRY
+app.post("/admin/bulk-expiry", requireAuth, (req, res) => {
+  const { files, expiresAt } = req.body;
+  if (!Array.isArray(files)) return res.status(400).json({ error: "Files array required" });
+  const db = readDb();
+  files.forEach(({ folder, name }) => {
+    const key = `${folder || "root"}/${name}`;
+    if (db.files[key]) db.files[key].expiresAt = expiresAt;
+  });
+  writeDb(db);
+  logEvent("BULK_SET_EXPIRY", { count: files.length, expiresAt });
+  res.json({ success: true });
+});
+
 // 12. BULK MOVE FILES
 app.post("/admin/bulk-move", requireAuth, (req, res) => {
   const { files, destinationFolder } = req.body; // files: [{ folder, name }]
