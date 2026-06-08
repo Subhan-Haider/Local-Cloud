@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { api, apiInstance } from "@/lib/api";
 import { useToast } from "@/components/ui/ToastProvider";
+import { LegacyGuides } from "@/components/developer/LegacyGuides";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Endpoint {
@@ -568,6 +569,19 @@ export default function DeveloperPage() {
                   </button>
                 );
               })}
+
+              <p className="px-2 py-1.5 text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-600 mt-4">Guides</p>
+              <button
+                onClick={() => { setActiveCategory("Legacy Guides"); setExpandedEndpoint(null); }}
+                className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-sm font-medium transition-all ${
+                  activeCategory === "Legacy Guides"
+                    ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-300"
+                    : "text-gray-600 hover:bg-slate-50 dark:text-gray-400 dark:hover:bg-slate-800/50"
+                }`}
+              >
+                <BookOpen className="h-4 w-4 shrink-0" />
+                Legacy Guides
+              </button>
             </nav>
           </aside>
 
@@ -578,163 +592,167 @@ export default function DeveloperPage() {
               <span className="text-xs text-gray-400">{categoryEndpoints.length} endpoint{categoryEndpoints.length !== 1 ? "s" : ""}</span>
             </div>
 
-            {categoryEndpoints.map(ep => {
-              const isOpen = expandedEndpoint === ep.id;
-              const result = testResults[ep.id];
-              const isRunning = testing === ep.id;
+            {activeCategory === "Legacy Guides" ? (
+              <LegacyGuides config={config} handleCopy={handleCopy} copied={copied} />
+            ) : (
+              categoryEndpoints.map(ep => {
+                const isOpen = expandedEndpoint === ep.id;
+                const result = testResults[ep.id];
+                const isRunning = testing === ep.id;
 
-              return (
-                <div
-                  key={ep.id}
-                  className={`rounded-2xl border bg-white dark:bg-gray-900 overflow-hidden transition-all ${
-                    isOpen ? "border-indigo-300 dark:border-indigo-700 shadow-md shadow-indigo-500/5" : "border-slate-200 dark:border-slate-800"
-                  }`}
-                >
-                  {/* Endpoint Header */}
-                  <button
-                    className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors"
-                    onClick={() => setExpandedEndpoint(isOpen ? null : ep.id)}
+                return (
+                  <div
+                    key={ep.id}
+                    className={`rounded-2xl border bg-white dark:bg-gray-900 overflow-hidden transition-all ${
+                      isOpen ? "border-indigo-300 dark:border-indigo-700 shadow-md shadow-indigo-500/5" : "border-slate-200 dark:border-slate-800"
+                    }`}
                   >
-                    <span className={`shrink-0 rounded-lg px-2 py-0.5 text-xs font-bold font-mono ${METHOD_COLORS[ep.method]}`}>
-                      {ep.method}
-                    </span>
-                    <code className="text-sm font-mono text-gray-700 dark:text-gray-300">{ep.path}</code>
-                    <span className="text-sm text-gray-500 dark:text-gray-400 hidden sm:block">{ep.summary}</span>
-                    <span className={`ml-auto shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
-                      ep.auth === "api-key"
-                        ? "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400"
-                        : "bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400"
-                    }`}>
-                      {ep.auth === "api-key" ? "API Key" : "Session"}
-                    </span>
-                    {isOpen ? <ChevronDown className="h-4 w-4 text-gray-400 ml-1 shrink-0" /> : <ChevronRight className="h-4 w-4 text-gray-400 ml-1 shrink-0" />}
-                  </button>
+                    {/* Endpoint Header */}
+                    <button
+                      className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors"
+                      onClick={() => setExpandedEndpoint(isOpen ? null : ep.id)}
+                    >
+                      <span className={`shrink-0 rounded-lg px-2 py-0.5 text-xs font-bold font-mono ${METHOD_COLORS[ep.method]}`}>
+                        {ep.method}
+                      </span>
+                      <code className="text-sm font-mono text-gray-700 dark:text-gray-300">{ep.path}</code>
+                      <span className="text-sm text-gray-500 dark:text-gray-400 hidden sm:block">{ep.summary}</span>
+                      <span className={`ml-auto shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
+                        ep.auth === "api-key"
+                          ? "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400"
+                          : "bg-violet-50 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400"
+                      }`}>
+                        {ep.auth === "api-key" ? "API Key" : "Session"}
+                      </span>
+                      {isOpen ? <ChevronDown className="h-4 w-4 text-gray-400 ml-1 shrink-0" /> : <ChevronRight className="h-4 w-4 text-gray-400 ml-1 shrink-0" />}
+                    </button>
 
-                  {/* Expanded: Params + Tester */}
-                  {isOpen && (
-                    <div className="border-t border-slate-100 dark:border-slate-800 px-5 py-5 space-y-5">
-                      {/* Parameters */}
-                      {ep.params && ep.params.length > 0 && (
-                        <div>
-                          <p className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-600 mb-3">Parameters</p>
-                          <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
-                            <table className="w-full text-sm">
-                              <thead className="bg-slate-50 dark:bg-slate-800/50">
-                                <tr>
-                                  {["Name", "In", "Type", "Required", "Description"].map(h => (
-                                    <th key={h} className="px-3 py-2 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">{h}</th>
-                                  ))}
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                                {ep.params.map(p => (
-                                  <tr key={p.name}>
-                                    <td className="px-3 py-2 font-mono text-xs text-indigo-600 dark:text-indigo-400">{p.name}</td>
-                                    <td className="px-3 py-2 text-xs text-gray-500">{p.in}</td>
-                                    <td className="px-3 py-2 text-xs text-gray-500">{p.type}</td>
-                                    <td className="px-3 py-2">
-                                      {p.required
-                                        ? <span className="text-xs font-semibold text-rose-500">required</span>
-                                        : <span className="text-xs text-gray-400">optional</span>
-                                      }
-                                    </td>
-                                    <td className="px-3 py-2 text-xs text-gray-600 dark:text-gray-400">{p.description}</td>
+                    {/* Expanded: Params + Tester */}
+                    {isOpen && (
+                      <div className="border-t border-slate-100 dark:border-slate-800 px-5 py-5 space-y-5">
+                        {/* Parameters */}
+                        {ep.params && ep.params.length > 0 && (
+                          <div>
+                            <p className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-600 mb-3">Parameters</p>
+                            <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800">
+                              <table className="w-full text-sm">
+                                <thead className="bg-slate-50 dark:bg-slate-800/50">
+                                  <tr>
+                                    {["Name", "In", "Type", "Required", "Description"].map(h => (
+                                      <th key={h} className="px-3 py-2 text-left text-xs font-semibold text-gray-500 dark:text-gray-400">{h}</th>
+                                    ))}
                                   </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Response Example */}
-                      <div>
-                        <p className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-600 mb-2">Response Example</p>
-                        <pre className="rounded-xl bg-slate-900 p-4 text-xs text-slate-200 overflow-x-auto">
-                          <code>{ep.responseExample}</code>
-                        </pre>
-                      </div>
-
-                      {/* Try It Out */}
-                      <div className="rounded-xl border border-indigo-100 dark:border-indigo-900/40 bg-indigo-50/50 dark:bg-indigo-950/20 p-4 space-y-3">
-                        <p className="text-xs font-bold uppercase tracking-widest text-indigo-400 mb-2">Try it out</p>
-
-                        {ep.params?.filter(p => p.in !== "body" || ep.bodyType === "json").map(p => (
-                          <div key={p.name}>
-                            <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                              {p.name}
-                              {p.required && <span className="text-rose-500 ml-1">*</span>}
-                            </label>
-                            {p.type === "boolean" ? (
-                              <select
-                                value={getTestValue(ep.id, p.name)}
-                                onChange={e => setTestValue(ep.id, p.name, e.target.value)}
-                                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                              >
-                                <option value="">Select...</option>
-                                <option value="true">true</option>
-                                <option value="false">false</option>
-                              </select>
-                            ) : (
-                              <input
-                                type="text"
-                                placeholder={p.description}
-                                value={getTestValue(ep.id, p.name)}
-                                onChange={e => setTestValue(ep.id, p.name, e.target.value)}
-                                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-gray-200 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                              />
-                            )}
-                          </div>
-                        ))}
-
-                        <div className="flex flex-col sm:flex-row gap-2 pt-1">
-                          <button
-                            onClick={() => runTest(ep)}
-                            disabled={!!isRunning}
-                            className="flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-60 transition-all"
-                          >
-                            {isRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />}
-                            {isRunning ? "Sending..." : "Send Request"}
-                          </button>
-                          <button
-                            onClick={() => handleCopy(buildCurlSnippet(ep, config.apiKey, config.baseUrl), `curl-${ep.id}`)}
-                            className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all"
-                          >
-                            {copied === `curl-${ep.id}` ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                            Copy cURL
-                          </button>
-                        </div>
-
-                        {/* Result */}
-                        {result && (
-                          <div className={`rounded-xl border p-3 space-y-2 ${
-                            result.ok
-                              ? "border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20"
-                              : "border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20"
-                          }`}>
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                {result.ok
-                                  ? <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                                  : <AlertCircle className="h-4 w-4 text-red-500" />
-                                }
-                                <span className={`text-sm font-semibold ${result.ok ? "text-emerald-700 dark:text-emerald-400" : "text-red-700 dark:text-red-400"}`}>
-                                  {result.status} {result.ok ? "OK" : "Error"}
-                                </span>
-                              </div>
-                              <span className="text-xs text-gray-400">{result.duration}ms</span>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                  {ep.params.map(p => (
+                                    <tr key={p.name}>
+                                      <td className="px-3 py-2 font-mono text-xs text-indigo-600 dark:text-indigo-400">{p.name}</td>
+                                      <td className="px-3 py-2 text-xs text-gray-500">{p.in}</td>
+                                      <td className="px-3 py-2 text-xs text-gray-500">{p.type}</td>
+                                      <td className="px-3 py-2">
+                                        {p.required
+                                          ? <span className="text-xs font-semibold text-rose-500">required</span>
+                                          : <span className="text-xs text-gray-400">optional</span>
+                                        }
+                                      </td>
+                                      <td className="px-3 py-2 text-xs text-gray-600 dark:text-gray-400">{p.description}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
                             </div>
-                            <pre className="rounded-lg bg-slate-900 p-3 text-xs text-slate-200 overflow-x-auto max-h-48">
-                              <code>{result.body}</code>
-                            </pre>
                           </div>
                         )}
+
+                        {/* Response Example */}
+                        <div>
+                          <p className="text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-slate-600 mb-2">Response Example</p>
+                          <pre className="rounded-xl bg-slate-900 p-4 text-xs text-slate-200 overflow-x-auto">
+                            <code>{ep.responseExample}</code>
+                          </pre>
+                        </div>
+
+                        {/* Try It Out */}
+                        <div className="rounded-xl border border-indigo-100 dark:border-indigo-900/40 bg-indigo-50/50 dark:bg-indigo-950/20 p-4 space-y-3">
+                          <p className="text-xs font-bold uppercase tracking-widest text-indigo-400 mb-2">Try it out</p>
+
+                          {ep.params?.filter(p => p.in !== "body" || ep.bodyType === "json").map(p => (
+                            <div key={p.name}>
+                              <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                {p.name}
+                                {p.required && <span className="text-rose-500 ml-1">*</span>}
+                              </label>
+                              {p.type === "boolean" ? (
+                                <select
+                                  value={getTestValue(ep.id, p.name)}
+                                  onChange={e => setTestValue(ep.id, p.name, e.target.value)}
+                                  className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                >
+                                  <option value="">Select...</option>
+                                  <option value="true">true</option>
+                                  <option value="false">false</option>
+                                </select>
+                              ) : (
+                                <input
+                                  type="text"
+                                  placeholder={p.description}
+                                  value={getTestValue(ep.id, p.name)}
+                                  onChange={e => setTestValue(ep.id, p.name, e.target.value)}
+                                  className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm text-gray-900 dark:text-gray-200 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                                />
+                              )}
+                            </div>
+                          ))}
+
+                          <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                            <button
+                              onClick={() => runTest(ep)}
+                              disabled={!!isRunning}
+                              className="flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-60 transition-all"
+                            >
+                              {isRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlayCircle className="h-4 w-4" />}
+                              {isRunning ? "Sending..." : "Send Request"}
+                            </button>
+                            <button
+                              onClick={() => handleCopy(buildCurlSnippet(ep, config.apiKey, config.baseUrl), `curl-${ep.id}`)}
+                              className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-all"
+                            >
+                              {copied === `curl-${ep.id}` ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                              Copy cURL
+                            </button>
+                          </div>
+
+                          {/* Result */}
+                          {result && (
+                            <div className={`rounded-xl border p-3 space-y-2 ${
+                              result.ok
+                                ? "border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20"
+                                : "border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20"
+                            }`}>
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  {result.ok
+                                    ? <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                                    : <AlertCircle className="h-4 w-4 text-red-500" />
+                                  }
+                                  <span className={`text-sm font-semibold ${result.ok ? "text-emerald-700 dark:text-emerald-400" : "text-red-700 dark:text-red-400"}`}>
+                                    {result.status} {result.ok ? "OK" : "Error"}
+                                  </span>
+                                </div>
+                                <span className="text-xs text-gray-400">{result.duration}ms</span>
+                              </div>
+                              <pre className="rounded-lg bg-slate-900 p-3 text-xs text-slate-200 overflow-x-auto max-h-48">
+                                <code>{result.body}</code>
+                              </pre>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                    )}
+                  </div>
+                );
+              })
+            )}
           </div>
         </div>
       </div>
