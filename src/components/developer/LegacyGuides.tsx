@@ -257,6 +257,9 @@ echo $response;
     a.remove();
   });`}</code>
             </pre>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
