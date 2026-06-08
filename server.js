@@ -1386,6 +1386,7 @@ app.post("/admin/share/email", requireAuth, async (req, res) => {
   }
 
   try {
+    const absoluteUrl = url.startsWith("http") ? url : `${BASE_URL}${url.startsWith("/") ? "" : "/"}${url}`;
     const displayFilename = name.length > 50 ? name.substring(0, 47) + "..." : name;
 
     const mailOptions = {
@@ -1406,13 +1407,13 @@ app.post("/admin/share/email", requireAuth, async (req, res) => {
             </div>
             
             <div>
-              <a href="${url}" style="display: inline-block; background-color: #3b82f6; color: #ffffff; font-weight: 600; font-size: 16px; text-decoration: none; padding: 16px 32px; border-radius: 8px; transition: background-color 0.2s; box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3);">
+              <a href="${absoluteUrl}" style="display: inline-block; background-color: #3b82f6; color: #ffffff; font-weight: 600; font-size: 16px; text-decoration: none; padding: 16px 32px; border-radius: 8px; transition: background-color 0.2s; box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.3);">
                 View / Download File
               </a>
             </div>
             
             <div style="margin-top: 40px; padding-top: 24px; border-top: 1px solid #e2e8f0;">
-              <p style="color: #94a3b8; font-size: 13px; line-height: 1.5; margin: 0;">If the button doesn't work, copy and paste this link into your browser:<br/><a href="${url}" style="color: #3b82f6; text-decoration: none; word-break: break-all; margin-top: 8px; display: inline-block;">${url}</a></p>
+              <p style="color: #94a3b8; font-size: 13px; line-height: 1.5; margin: 0;">If the button doesn't work, copy and paste this link into your browser:<br/><a href="${absoluteUrl}" style="color: #3b82f6; text-decoration: none; word-break: break-all; margin-top: 8px; display: inline-block;">${absoluteUrl}</a></p>
             </div>
           </div>
         </div>
