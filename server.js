@@ -61,6 +61,41 @@ if (process.env.SMTP_ENABLED === "true") {
   });
 }
 
+function sendSystemAlertEmail(title, message, emoji = "🔔") {
+  if (!transporter) return;
+  const db = readDb();
+  const settings = db.settings || {};
+  if (settings.notificationsEnabled === false) return;
+
+  const emails = settings.notificationEmails || [process.env.ADMIN_EMAIL].filter(Boolean);
+  if (emails.length === 0) return;
+
+  const mailOptions = {
+    from: process.env.SMTP_FROM || process.env.SMTP_USER,
+    to: emails.join(", "),
+    subject: `${emoji} System Alert: ${title}`,
+    html: `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; padding: 40px 20px; background-color: #f1f5f9; color: #334155; text-align: center;">
+        <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; padding: 30px; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);">
+          <div style="background-color: #e0e7ff; height: 60px; width: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px auto;">
+            <span style="font-size: 30px;">${emoji}</span>
+          </div>
+          <h2 style="color: #4f46e5; font-weight: 800; font-size: 24px; margin-bottom: 10px; margin-top: 0;">${title}</h2>
+          <p style="color: #64748b; font-size: 16px; margin-bottom: 30px; line-height: 1.5;">${message}</p>
+          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; text-align: left; margin-bottom: 30px;">
+            <p style="margin: 0;"><strong style="color: #0f172a; width: 100px; display: inline-block;">Time:</strong> <span style="color: #475569;">${new Date().toLocaleString()}</span></p>
+          </div>
+          <a href="https://storage.lootops.me" style="display: inline-block; background-color: #4f46e5; color: #ffffff; font-weight: 600; font-size: 16px; text-decoration: none; padding: 14px 28px; border-radius: 8px; transition: background-color 0.2s;">Go to Dashboard</a>
+        </div>
+      </div>
+    `
+  };
+
+  transporter.sendMail(mailOptions, (error) => {
+    if (error) console.error("❌ Error sending alert email:", error);
+  });
+}
+
 function sendUploadNotificationEmail(filename, folderName, fileSize) {
   if (!transporter) return;
   const db = readDb();
@@ -129,11 +164,15 @@ exec("ffmpeg -version", (err) => {
 // =====================
 // MIDDLEWARE
 // =====================
+// Trust the first proxy (nginx) so X-Forwarded-For is read correctly
+// Required for express-rate-limit to work behind a reverse proxy
+app.set("trust proxy", 1);
+
 app.use(cors({
   origin: true,
   credentials: true,
   methods: ["GET", "POST", "DELETE", "PUT", "PATCH"],
-  allowedHeaders: ["Content-Type", "x-api-key", "Authorization"]
+  allowedHeaders: ["Content-Type", "x-api-key", "Authorization", "x-mfa-token"]
 }));
 
 app.use(express.json());
@@ -142,7 +181,15 @@ app.use(express.json());
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
+  validate: { xForwardedForHeader: false }, // Suppress ERR_ERL_UNEXPECTED_X_FORWARDED_FOR behind nginx
   message: { error: "Too many requests, please try again later." }
+});
+
+const visitLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 1, // Only 1 email per hour per IP
+  validate: { xForwardedForHeader: false }, // Suppress ERR_ERL_UNEXPECTED_X_FORWARDED_FOR behind nginx
+  message: { success: false, message: "Too many visits" }
 });
 
 // =====================
@@ -265,8 +312,8 @@ const requireAuth = async (req, res, next) => {
     const securityDoc = await db.collection("security").doc(decoded.uid).get();
     
     if (securityDoc.exists && securityDoc.data().mfaEnabled) {
-      // User has 2FA enabled, check for the MFA cookie
-      const mfaToken = req.cookies.mfa_token;
+      // Accept MFA token from cookie (same-domain) OR x-mfa-token header (Vercel proxy fallback)
+      const mfaToken = req.cookies.mfa_token || req.headers["x-mfa-token"];
       if (!mfaToken) {
         return res.status(401).json({ error: "MFA required", mfaRequired: true });
       }
@@ -294,6 +341,21 @@ const requireAuth = async (req, res, next) => {
     return res.status(401).json({ error: "Invalid Firebase token" });
   }
 };
+
+// =====================
+// ALERTS (Login / Visit)
+// =====================
+app.post("/api/alerts/login", requireAuth, (req, res) => {
+  const email = req.user?.email || "Unknown Admin";
+  sendSystemAlertEmail("Admin Login", `Admin <strong>${email}</strong> has successfully logged into the dashboard.`, "🔐");
+  res.json({ success: true });
+});
+
+app.post("/api/alerts/visit", visitLimiter, (req, res) => {
+  const ip = req.headers["x-forwarded-for"] || req.socket.remoteAddress;
+  sendSystemAlertEmail("Website Visit", `Someone visited the website from IP: <strong>${ip}</strong>.`, "👀");
+  res.json({ success: true });
+});
 
 // =====================
 // DIRECTORIES SETUP
@@ -409,8 +471,10 @@ async function getAllFilesAsync(dirPath, db, arrayOfFiles = []) {
           ".txt", ".md", ".html", ".htm", ".css", ".js", ".ts", ".jsx", ".tsx",
           ".py", ".json", ".xml", ".csv", ".yaml", ".yml", ".sh", ".bash",
           ".php", ".rb", ".java", ".c", ".cpp", ".h", ".cs", ".go", ".rs",
-          ".sql", ".graphql", ".env", ".toml", ".ini", ".cfg", ".log"
+          ".sql", ".graphql", ".env", ".toml", ".ini", ".cfg", ".log", ".spec"
         ].includes(ext)) type = "code";
+        // Dotfiles with no extension (e.g. .gitignore) — treat as code
+        else if (!ext && file.startsWith(".")) type = "code";
 
         const fileKey = `${folder}/${file}`;
         const meta = db.files[fileKey] || { isPublic: true, downloads: 0 };
@@ -487,8 +551,10 @@ const getAllFiles = (dirPath, db, arrayOfFiles = []) => {
         ".txt", ".md", ".html", ".htm", ".css", ".js", ".ts", ".jsx", ".tsx",
         ".py", ".json", ".xml", ".csv", ".yaml", ".yml", ".sh", ".bash",
         ".php", ".rb", ".java", ".c", ".cpp", ".h", ".cs", ".go", ".rs",
-        ".sql", ".graphql", ".env", ".toml", ".ini", ".cfg", ".log"
+        ".sql", ".graphql", ".env", ".toml", ".ini", ".cfg", ".log", ".spec"
       ].includes(ext)) type = "code";
+      // Dotfiles with no extension (e.g. .gitignore) — treat as code
+      else if (!ext && file.startsWith(".")) type = "code";
       const fileKey = `${folder}/${file}`;
       const meta = db.files[fileKey] || { isPublic: true, downloads: 0 };
       const thumbFilename = `${file}-thumb.webp`;
@@ -546,19 +612,42 @@ const ALLOWED_EXTENSIONS = new Set([
   ".py", ".json", ".xml", ".csv", ".yaml", ".yml",
   ".sh", ".bash", ".php", ".rb", ".java", ".c", ".cpp",
   ".h", ".cs", ".go", ".rs", ".sql", ".graphql",
-  ".env", ".toml", ".ini", ".cfg", ".log",
+  ".env", ".toml", ".ini", ".cfg", ".log", ".spec",
   // Archives
   ".zip", ".tar", ".gz", ".rar", ".7z", ".tar.gz", ".tar.bz2",
   // Installers / Packages
   ".apk", ".aab", ".exe", ".msi", ".dmg", ".pkg", ".deb", ".rpm", ".ipa", ".appx", ".appxbundle", ".msix"
 ]);
 
+// Common dotfiles (no extension — the full filename IS the identifier)
+const ALLOWED_DOTFILES = new Set([
+  ".gitignore", ".gitattributes", ".gitmodules", ".gitkeep",
+  ".htaccess", ".htpasswd",
+  ".npmignore", ".npmrc",
+  ".eslintignore", ".eslintrc",
+  ".prettierignore", ".prettierrc",
+  ".babelrc", ".browserslistrc",
+  ".editorconfig", ".nvmrc", ".node-version",
+  ".dockerignore", ".env", ".env.local", ".env.example",
+  ".travis.yml", ".gitlab-ci.yml"
+]);
+
 const fileFilter = (req, file, cb) => {
+  const basename = path.basename(file.originalname).toLowerCase();
   const ext = path.extname(file.originalname).toLowerCase();
+
+  // Handle dotfiles: path.extname('.gitignore') === '' but basename starts with '.'
+  if (!ext && basename.startsWith(".")) {
+    if (ALLOWED_DOTFILES.has(basename)) {
+      return cb(null, true);
+    }
+    return cb(new Error(`Dotfile "${basename}" is not allowed.`));
+  }
+
   if (ALLOWED_EXTENSIONS.has(ext)) {
     cb(null, true);
   } else {
-    cb(new Error(`File type "${ext}" is not allowed.`));
+    cb(new Error(`File type "${ext || basename}" is not allowed.`));
   }
 };
 
@@ -783,6 +872,7 @@ app.post("/api/auth/2fa/verify-setup", requireAuth, async (req, res) => {
         secret,
         encoding: "base32",
         token,
+        window: 1, // Allow ±30s clock drift
       });
     }
 
@@ -813,11 +903,27 @@ app.post("/api/auth/2fa/disable", requireAuth, async (req, res) => {
       return res.status(400).json({ error: "2FA is not enabled" });
     }
 
-    const verified = speakeasy.totp.verify({
-      secret: doc.data().mfaSecret,
-      encoding: "base32",
-      token,
-    });
+    const method = doc.data().mfaMethod || "app";
+    let verified = false;
+
+    if (method === "email") {
+      // Verify against the stored email code
+      const dbJson = readDb();
+      const stored = dbJson.mfaCodes[req.user.uid];
+      if (stored && stored.code === token && stored.expiresAt > Date.now()) {
+        verified = true;
+        delete dbJson.mfaCodes[req.user.uid];
+        writeDb(dbJson);
+      }
+    } else {
+      // Verify TOTP with ±30s clock drift tolerance
+      verified = speakeasy.totp.verify({
+        secret: doc.data().mfaSecret,
+        encoding: "base32",
+        token,
+        window: 1,
+      });
+    }
 
     if (verified) {
       await db.collection("security").doc(req.user.uid).update({
@@ -868,6 +974,7 @@ app.post("/api/auth/2fa/login", async (req, res) => {
         secret: doc.data().mfaSecret,
         encoding: "base32",
         token: code,
+        window: 1, // Allow ±30s clock drift between phone and server
       });
     }
 
@@ -876,14 +983,17 @@ app.post("/api/auth/2fa/login", async (req, res) => {
       const signature = crypto.createHmac("sha256", process.env.FIREBASE_PROJECT_ID).update(`${decoded.uid}.${timestamp}`).digest("hex");
       const mfaToken = `${decoded.uid}.${timestamp}.${signature}`;
 
+      // Set as httpOnly cookie (works when Express is on same domain)
       res.cookie("mfa_token", mfaToken, {
         httpOnly: true,
         secure: true,
         sameSite: "none",
         maxAge: 24 * 60 * 60 * 1000 // 1 day
       });
-      
-      res.json({ success: true });
+
+      // Also return token in body so client can store in localStorage
+      // (needed when Vercel proxy strips Set-Cookie headers)
+      res.json({ success: true, mfaToken });
     } else {
       res.status(400).json({ error: "Invalid code" });
     }
@@ -2540,7 +2650,7 @@ app.post("/admin/zip", requireAuth, (req, res) => {
   }
 
   // --- Step 2: Set up archive and pipe to response ---
-  const archive = archiver("zip", { zlib: { level: 9 } });
+  const archive = new archiver.ZipArchive({ zlib: { level: 9 } });
 
   archive.on("error", (err) => {
     console.error("Archive error:", err);
@@ -3378,6 +3488,33 @@ app.delete("/admin/users/:uid", requireAuth, async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: "Failed to delete user." });
   }
+});
+
+// =====================
+// SYSTEM CONTROLS
+// =====================
+
+// POST /admin/system/reboot  — runs `sudo reboot` on the host machine
+app.post("/admin/system/reboot", requireAuth, (req, res) => {
+  logEvent("SYSTEM_REBOOT", { triggeredBy: req.user?.email || "unknown" });
+  // Respond FIRST so the client receives the success before the connection drops
+  res.json({ success: true, message: "Server is rebooting…" });
+  setTimeout(() => {
+    exec("sudo reboot", (err) => {
+      if (err) console.error("Reboot command failed:", err.message);
+    });
+  }, 500);
+});
+
+// POST /admin/system/shutdown — runs `sudo shutdown -h now`
+app.post("/admin/system/shutdown", requireAuth, (req, res) => {
+  logEvent("SYSTEM_SHUTDOWN", { triggeredBy: req.user?.email || "unknown" });
+  res.json({ success: true, message: "Server is shutting down…" });
+  setTimeout(() => {
+    exec("sudo shutdown -h now", (err) => {
+      if (err) console.error("Shutdown command failed:", err.message);
+    });
+  }, 500);
 });
 
 // =====================

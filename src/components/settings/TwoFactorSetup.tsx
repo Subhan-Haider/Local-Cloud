@@ -29,11 +29,11 @@ function CodeInput({
       {digits.map((d, i) => (
         <div
           key={i}
-          className={`flex h-12 w-10 items-center justify-center rounded-xl border text-lg font-bold text-white transition-colors ${
-            d ? "border-indigo-500/60 bg-indigo-500/10" : "border-white/10 bg-white/5"
+          className={`flex h-12 w-10 items-center justify-center rounded-xl border text-lg font-bold transition-colors ${
+            d ? "border-indigo-500 bg-indigo-50 text-indigo-900 dark:border-indigo-500/60 dark:bg-indigo-500/10 dark:text-white" : "border-slate-200 bg-slate-50 text-gray-900 dark:border-white/10 dark:bg-white/5 dark:text-white"
           }`}
         >
-          {d || <span className="text-slate-600">—</span>}
+          {d || <span className="text-gray-400 dark:text-slate-600">—</span>}
         </div>
       ))}
     </div>
@@ -149,27 +149,27 @@ export function TwoFactorSetup({ onStatusChange }: Props) {
   }
 
   return (
-    <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-6">
+    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6 dark:border-white/8 dark:bg-white/[0.03]">
       {/* Header */}
       <div className="mb-5 flex items-center gap-3">
-        <div className={`flex h-9 w-9 items-center justify-center rounded-xl ${mfaEnabled ? "bg-emerald-500/15" : "bg-slate-500/15"}`}>
+        <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${mfaEnabled ? "bg-emerald-50 dark:bg-emerald-500/15" : "bg-slate-100 dark:bg-slate-500/15"}`}>
           {mfaEnabled
-            ? <ShieldCheck className="h-4 w-4 text-emerald-400" />
-            : <ShieldOff className="h-4 w-4 text-slate-400" />
+            ? <ShieldCheck className="h-5 w-5 text-emerald-500 dark:text-emerald-400" />
+            : <ShieldOff className="h-5 w-5 text-slate-500 dark:text-slate-400" />
           }
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <h3 className="text-sm font-semibold text-white truncate">Two-Factor Authentication</h3>
+            <h3 className="font-semibold text-gray-900 dark:text-white truncate">Two-Factor Authentication</h3>
             <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${
               mfaEnabled
-                ? "bg-emerald-500/15 text-emerald-400"
-                : "bg-slate-500/15 text-slate-400"
+                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400"
+                : "bg-slate-100 text-slate-600 dark:bg-slate-500/15 dark:text-slate-400"
             }`}>
               {mfaEnabled ? `ENABLED (${activeMethod?.toUpperCase()})` : "DISABLED"}
             </span>
           </div>
-          <p className="text-xs text-slate-400">Protect your account with an extra layer of security.</p>
+          <p className="text-sm text-gray-500 dark:text-slate-400">Protect your account with an extra layer of security.</p>
         </div>
         {/* Toggle indicator */}
         {mfaEnabled
@@ -198,7 +198,15 @@ export function TwoFactorSetup({ onStatusChange }: Props) {
 
       {step === "idle" && mfaEnabled && !showDisable && (
         <button
-          onClick={() => { setShowDisable(true); setError(""); }}
+          onClick={() => {
+            setShowDisable(true);
+            setError("");
+            if (activeMethod === "email") {
+              api.mfa.sendEmailCode()
+                .then(() => success("Verification code sent to your email!"))
+                .catch(() => toastError("Failed to send verification code."));
+            }
+          }}
           className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-500/20 bg-red-500/5 py-2.5 text-sm font-semibold text-red-400 hover:border-red-500/40 hover:bg-red-500/10 transition-all"
         >
           <ShieldOff className="h-4 w-4" />
@@ -208,17 +216,18 @@ export function TwoFactorSetup({ onStatusChange }: Props) {
 
       {step === "idle" && mfaEnabled && showDisable && (
         <div className="space-y-4">
-          <p className="text-sm text-slate-300">Enter the 6-digit code from your {activeMethod === "app" ? "authenticator app" : "email"} to disable 2FA:</p>
-          <input
-            type="text"
-            inputMode="numeric"
-            maxLength={6}
-            value={disableCode}
-            onChange={(e) => handleCodeInput(e.target.value, setDisableCode)}
-            placeholder="000000"
-            className="w-full rounded-xl border border-white/8 bg-white/5 px-4 py-2.5 text-center text-xl tracking-[0.5em] text-white placeholder:text-slate-600 focus:border-red-500/40 focus:outline-none focus:ring-2 focus:ring-red-500/20"
-          />
-          <CodeInput value={disableCode} onChange={setDisableCode} />
+          <p className="text-sm text-gray-700 dark:text-slate-300">Enter the 6-digit code from your {activeMethod === "app" ? "authenticator app" : "email"} to disable 2FA:</p>
+          <div className="relative mx-auto w-full max-w-sm">
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={6}
+              value={disableCode}
+              onChange={(e) => handleCodeInput(e.target.value, setDisableCode)}
+              className="absolute inset-0 z-10 h-full w-full cursor-text opacity-0"
+            />
+            <CodeInput value={disableCode} onChange={setDisableCode} />
+          </div>
           
           {activeMethod === "email" && (
             <button 
@@ -229,8 +238,8 @@ export function TwoFactorSetup({ onStatusChange }: Props) {
             </button>
           )}
 
-          <div className="flex gap-3">
-            <button onClick={() => { setShowDisable(false); setDisableCode(""); setError(""); }} className="flex-1 rounded-xl border border-white/8 py-2.5 text-sm text-slate-400 hover:bg-white/5 transition-all">
+          <div className="flex gap-3 mt-4">
+            <button onClick={() => { setShowDisable(false); setDisableCode(""); setError(""); }} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm text-gray-600 hover:bg-slate-50 dark:border-white/8 dark:text-slate-400 dark:hover:bg-white/5 transition-all">
               Cancel
             </button>
             <button onClick={handleDisable} disabled={loading || disableCode.length !== 6} className="flex-1 rounded-xl bg-red-600 py-2.5 text-sm font-bold text-white hover:bg-red-500 disabled:opacity-50 transition-all">
@@ -242,34 +251,34 @@ export function TwoFactorSetup({ onStatusChange }: Props) {
 
       {/* ── METHOD SELECT ──────────────────────────────────────── */}
       {step === "method_select" && (
-        <div className="space-y-4">
-          <p className="text-sm text-slate-300 mb-2">Choose how you want to receive your security codes:</p>
+        <div className="space-y-4 mt-4">
+          <p className="text-sm text-gray-700 dark:text-slate-300 mb-2">Choose how you want to receive your security codes:</p>
           
           <button
             onClick={handleStartAppSetup}
             disabled={loading}
-            className="flex w-full items-center gap-4 rounded-xl border border-white/8 bg-white/5 p-4 text-left hover:bg-white/10 transition-colors"
+            className="flex w-full items-center gap-4 rounded-xl border border-slate-200 bg-white p-4 text-left hover:bg-slate-50 dark:border-white/8 dark:bg-white/5 dark:hover:bg-white/10 transition-colors"
           >
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-500/20">
-              <Smartphone className="h-5 w-5 text-indigo-400" />
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-indigo-50 dark:bg-indigo-500/20">
+              <Smartphone className="h-5 w-5 text-indigo-500 dark:text-indigo-400" />
             </div>
             <div>
-              <p className="font-semibold text-white">Authenticator App</p>
-              <p className="text-xs text-slate-400">Get codes from an app like Google Authenticator or Authy.</p>
+              <p className="font-semibold text-gray-900 dark:text-white">Authenticator App</p>
+              <p className="text-xs text-gray-500 dark:text-slate-400">Get codes from an app like Google Authenticator or Authy.</p>
             </div>
           </button>
 
           <button
             onClick={handleStartEmailSetup}
             disabled={loading}
-            className="flex w-full items-center gap-4 rounded-xl border border-white/8 bg-white/5 p-4 text-left hover:bg-white/10 transition-colors"
+            className="flex w-full items-center gap-4 rounded-xl border border-slate-200 bg-white p-4 text-left hover:bg-slate-50 dark:border-white/8 dark:bg-white/5 dark:hover:bg-white/10 transition-colors"
           >
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-purple-500/20">
-              <Mail className="h-5 w-5 text-purple-400" />
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-purple-50 dark:bg-purple-500/20">
+              <Mail className="h-5 w-5 text-purple-500 dark:text-purple-400" />
             </div>
             <div>
-              <p className="font-semibold text-white">Email Address</p>
-              <p className="text-xs text-slate-400">Receive a one-time code in your inbox each time you sign in.</p>
+              <p className="font-semibold text-gray-900 dark:text-white">Email Address</p>
+              <p className="text-xs text-gray-500 dark:text-slate-400">Receive a one-time code in your inbox each time you sign in.</p>
             </div>
           </button>
 
@@ -281,9 +290,9 @@ export function TwoFactorSetup({ onStatusChange }: Props) {
 
       {/* ── APP SETUP: SHOW QR ──────────────────────────────────────── */}
       {step === "qr" && (
-        <div className="space-y-5">
-          <div className="flex items-center gap-2 text-sm text-slate-300">
-            <Smartphone className="h-4 w-4 text-indigo-400" />
+        <div className="space-y-5 mt-4">
+          <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-slate-300">
+            <Smartphone className="h-5 w-5 text-indigo-500 dark:text-indigo-400" />
             <span>Scan this QR code with your authenticator app</span>
           </div>
 
@@ -296,13 +305,13 @@ export function TwoFactorSetup({ onStatusChange }: Props) {
             </div>
           )}
 
-          <div className="rounded-xl border border-white/8 bg-white/5 p-3">
-            <p className="mb-1 text-xs text-slate-400">Or enter this key manually:</p>
-            <p className="break-all font-mono text-xs text-indigo-300 tracking-widest">{secret}</p>
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-white/8 dark:bg-white/5">
+            <p className="mb-1 text-xs text-gray-500 dark:text-slate-400">Or enter this key manually:</p>
+            <p className="break-all font-mono text-xs text-indigo-600 dark:text-indigo-300 tracking-widest">{secret}</p>
           </div>
 
           <div className="flex gap-3">
-            <button onClick={() => setStep("method_select")} className="flex-1 rounded-xl border border-white/8 py-2.5 text-sm text-slate-400 hover:bg-white/5 transition-all">
+            <button onClick={() => setStep("method_select")} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm text-gray-600 hover:bg-slate-50 dark:border-white/8 dark:text-slate-400 dark:hover:bg-white/5 transition-all">
               Back
             </button>
             <button
@@ -318,9 +327,9 @@ export function TwoFactorSetup({ onStatusChange }: Props) {
 
       {/* ── APP SETUP: VERIFY ───────────────────────────────────────── */}
       {step === "app_verify" && (
-        <div className="space-y-5">
-          <p className="text-sm text-slate-300">
-            Enter the <strong className="text-white">6-digit code</strong> from your authenticator app to enable 2FA:
+        <div className="space-y-5 mt-4">
+          <p className="text-sm text-gray-700 dark:text-slate-300">
+            Enter the <strong className="text-gray-900 dark:text-white">6-digit code</strong> from your authenticator app to enable 2FA:
           </p>
 
           <CodeInput value={code} onChange={setCode} />
@@ -331,11 +340,11 @@ export function TwoFactorSetup({ onStatusChange }: Props) {
             value={code}
             onChange={(e) => handleCodeInput(e.target.value, setCode)}
             placeholder="000000"
-            className="w-full rounded-xl border border-white/8 bg-white/5 px-4 py-2.5 text-center text-xl tracking-[0.5em] text-white placeholder:text-slate-600 focus:border-indigo-500/60 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-center text-xl tracking-[0.5em] text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-white/8 dark:bg-white/5 dark:text-white dark:placeholder-slate-600 dark:focus:border-indigo-500/60 dark:focus:ring-indigo-500/20"
           />
 
           <div className="flex gap-3">
-            <button onClick={() => { setStep("qr"); setCode(""); setError(""); }} className="flex-1 rounded-xl border border-white/8 py-2.5 text-sm text-slate-400 hover:bg-white/5 transition-all">
+            <button onClick={() => { setStep("qr"); setCode(""); setError(""); }} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm text-gray-600 hover:bg-slate-50 dark:border-white/8 dark:text-slate-400 dark:hover:bg-white/5 transition-all">
               Back
             </button>
             <button
@@ -351,9 +360,9 @@ export function TwoFactorSetup({ onStatusChange }: Props) {
 
       {/* ── EMAIL SETUP: VERIFY ───────────────────────────────────────── */}
       {step === "email_verify" && (
-        <div className="space-y-5">
-          <div className="flex items-center gap-2 text-sm text-slate-300">
-            <Mail className="h-4 w-4 text-purple-400" />
+        <div className="space-y-5 mt-4">
+          <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-slate-300">
+            <Mail className="h-5 w-5 text-purple-500 dark:text-purple-400" />
             <span>We sent a 6-digit code to your email.</span>
           </div>
 
@@ -365,7 +374,7 @@ export function TwoFactorSetup({ onStatusChange }: Props) {
             value={code}
             onChange={(e) => handleCodeInput(e.target.value, setCode)}
             placeholder="000000"
-            className="w-full rounded-xl border border-white/8 bg-white/5 px-4 py-2.5 text-center text-xl tracking-[0.5em] text-white placeholder:text-slate-600 focus:border-purple-500/60 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
+            className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-center text-xl tracking-[0.5em] text-gray-900 placeholder-gray-400 focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500 dark:border-white/8 dark:bg-white/5 dark:text-white dark:placeholder-slate-600 dark:focus:border-purple-500/60 dark:focus:ring-purple-500/20"
           />
 
           <button 
@@ -377,7 +386,7 @@ export function TwoFactorSetup({ onStatusChange }: Props) {
           </button>
 
           <div className="flex gap-3">
-            <button onClick={() => { setStep("method_select"); setCode(""); setError(""); }} className="flex-1 rounded-xl border border-white/8 py-2.5 text-sm text-slate-400 hover:bg-white/5 transition-all">
+            <button onClick={() => { setStep("method_select"); setCode(""); setError(""); }} className="flex-1 rounded-xl border border-slate-200 py-2.5 text-sm text-gray-600 hover:bg-slate-50 dark:border-white/8 dark:text-slate-400 dark:hover:bg-white/5 transition-all">
               Back
             </button>
             <button

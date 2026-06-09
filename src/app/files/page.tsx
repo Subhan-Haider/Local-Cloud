@@ -114,8 +114,17 @@ export default function FilesPage() {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-    } catch {
-      toastError("Failed to download selected files");
+    } catch (err: any) {
+      let msg = "Failed to download selected files";
+      if (err.response?.data instanceof Blob) {
+        try {
+          const text = await err.response.data.text();
+          msg = JSON.parse(text).error || msg;
+        } catch {}
+      } else if (err.response?.data?.error) {
+        msg = err.response.data.error;
+      }
+      toastError(msg);
     }
   };
 
@@ -157,8 +166,33 @@ export default function FilesPage() {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
+    } catch (err: any) {
+      let msg = "Failed to download folder";
+      if (err.response?.data instanceof Blob) {
+        try {
+          const text = await err.response.data.text();
+          msg = JSON.parse(text).error || msg;
+        } catch {}
+      } else if (err.response?.data?.error) {
+        msg = err.response.data.error;
+      }
+      toastError(msg);
+    }
+  };
+
+  const handleDeleteFolder = async (folder: string) => {
+    const fileCount = files.filter(f => f.folder === folder).length;
+    const msg = fileCount > 0
+      ? `Delete folder "${folder}" and all ${fileCount} file(s) inside? This cannot be undone.`
+      : `Delete empty folder "${folder}"?`;
+    if (!confirm(msg)) return;
+    try {
+      await api.deleteFolder(folder);
+      success(`Folder "${folder}" deleted`);
+      if (activeFolder === folder) setActiveFolder(null);
+      loadData();
     } catch {
-      toastError("Failed to download folder");
+      toastError(`Failed to delete folder "${folder}"`);
     }
   };
 
@@ -171,7 +205,7 @@ export default function FilesPage() {
           <p className="text-sm text-gray-500 dark:text-gray-400">Manage all your uploaded files.</p>
         </div>
 
-        <FolderView folders={foldersList} activeFolder={activeFolder} onSelectFolder={setActiveFolder} onDownloadFolder={handleDownloadFolder} />
+        <FolderView folders={foldersList} activeFolder={activeFolder} onSelectFolder={setActiveFolder} onDownloadFolder={handleDownloadFolder} onDeleteFolder={handleDeleteFolder} />
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           {/* Filters */}

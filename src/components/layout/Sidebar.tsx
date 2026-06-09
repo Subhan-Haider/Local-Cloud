@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
@@ -14,8 +14,10 @@ import {
   HardDrive,
   Menu,
   Code,
-  Terminal
+  Terminal,
+  Power
 } from "lucide-react";
+import { api } from "@/lib/api";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -29,6 +31,11 @@ const navigation = [
 export function Sidebar() {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
+  const [diskInfo, setDiskInfo] = useState<{ totalMB: string; totalFiles: number } | null>(null);
+
+  useEffect(() => {
+    api.getDiskInfo().then(setDiskInfo).catch(() => {});
+  }, []);
 
   if (pathname === "/privacy" || pathname === "/terms") {
     return null;
@@ -127,19 +134,48 @@ export function Sidebar() {
               Python Studio
               <span className="ml-auto rounded-full bg-yellow-400/20 px-1.5 py-0.5 text-[9px] font-bold text-yellow-500 dark:text-yellow-400">NEW</span>
             </Link>
+
+            <button
+              onClick={async () => {
+                if (confirm("Are you sure you want to REBOOT the server? This will drop all active connections.")) {
+                  try {
+                    await api.system.reboot();
+                    alert("Reboot command sent. The server will restart shortly.");
+                  } catch (err: any) {
+                    alert("Failed to reboot server: " + (err.response?.data?.error || err.message));
+                  }
+                }
+                setIsOpen(false);
+              }}
+              className="mt-1 w-full group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150 text-gray-600 hover:bg-red-50/60 hover:text-red-700 dark:text-gray-400 dark:hover:bg-red-950/20 dark:hover:text-red-400"
+            >
+              <Power className="h-4.5 w-4.5 shrink-0 text-gray-400 group-hover:text-red-500 transition-colors" />
+              Reboot Server
+            </button>
           </div>
         </nav>
 
-        {/* Storage indicator at bottom */}
+        {/* Real storage indicator at bottom */}
         <div className="m-3 rounded-xl bg-gradient-to-br from-indigo-50 to-purple-50 p-4 dark:from-indigo-950/30 dark:to-purple-950/30 border border-indigo-100 dark:border-indigo-900/40">
           <div className="flex items-center gap-2 mb-2">
             <HardDrive className="h-4 w-4 text-indigo-500" />
             <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">Storage</span>
+            {diskInfo && (
+              <span className="ml-auto text-[10px] text-gray-400 dark:text-gray-500">
+                {(parseFloat(diskInfo.totalMB) / 1024).toFixed(2)} GB
+              </span>
+            )}
           </div>
           <div className="h-1.5 w-full rounded-full bg-white/60 dark:bg-gray-800/60 overflow-hidden">
-            <div className="h-full w-2/5 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500" />
+            {diskInfo && (() => {
+              const pct = Math.min((parseFloat(diskInfo.totalMB) / 1024 / 100) * 100, 100);
+              const barColor = pct > 90 ? "from-red-500 to-red-600" : pct > 70 ? "from-orange-400 to-amber-500" : "from-indigo-500 to-purple-500";
+              return <div className={`h-full rounded-full bg-gradient-to-r ${barColor} transition-all duration-700`} style={{ width: `${Math.max(pct, 2)}%` }} />;
+            })()}
           </div>
-          <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">Personal cloud storage</p>
+          <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+            {diskInfo ? `${diskInfo.totalFiles} files · Personal cloud` : "Personal cloud storage"}
+          </p>
         </div>
 
         {/* Legal links */}

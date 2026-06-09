@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useToast } from "@/components/ui/ToastProvider";
-import { Globe, Users, Plus, Trash2, Loader2, Bell, Link } from "lucide-react";
+import { Globe, Users, Plus, Trash2, Loader2, Bell, Link, Power, RefreshCw, AlertTriangle } from "lucide-react";
 
 export function SystemSettings() {
   const [origins, setOrigins] = useState<string[]>([]);
@@ -24,6 +24,10 @@ export function SystemSettings() {
   const [removingNotificationEmail, setRemovingNotificationEmail] = useState<string | null>(null);
   const [togglingNotifications, setTogglingNotifications] = useState(false);
   const [savingBaseUrl, setSavingBaseUrl] = useState(false);
+
+  const [rebooting, setRebooting] = useState(false);
+  const [shuttingDown, setShuttingDown] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<"reboot" | "shutdown" | null>(null);
 
   const { success, error } = useToast();
 
@@ -138,6 +142,32 @@ export function SystemSettings() {
       error("Failed to update Custom Base URL");
     } finally {
       setSavingBaseUrl(false);
+    }
+  };
+
+  const handleReboot = async () => {
+    setConfirmAction(null);
+    setRebooting(true);
+    try {
+      await api.system.reboot();
+      success("Reboot command sent! Server will restart shortly.");
+    } catch {
+      error("Failed to send reboot command.");
+    } finally {
+      setRebooting(false);
+    }
+  };
+
+  const handleShutdown = async () => {
+    setConfirmAction(null);
+    setShuttingDown(true);
+    try {
+      await api.system.shutdown();
+      success("Shutdown command sent! Server will power off shortly.");
+    } catch {
+      error("Failed to send shutdown command.");
+    } finally {
+      setShuttingDown(false);
     }
   };
 
@@ -402,6 +432,74 @@ export function SystemSettings() {
               {savingBaseUrl ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Base URL"}
             </button>
           </form>
+        </div>
+      </div>
+
+      {/* Server Controls Card */}
+      <div className="rounded-2xl border border-red-200 bg-white shadow-sm p-6 flex flex-col min-h-[200px] lg:col-span-3">
+        <div className="mb-5 flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-50">
+            <Power className="h-5 w-5 text-red-500" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-gray-900">Server Controls</h3>
+            <p className="text-sm text-gray-500">Reboot or shut down the server machine</p>
+          </div>
+        </div>
+
+        {/* Confirmation dialog */}
+        {confirmAction && (
+          <div className="mb-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4">
+            <AlertTriangle className="h-5 w-5 shrink-0 text-amber-500 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-amber-800">
+                {confirmAction === "reboot" ? "Confirm Reboot" : "Confirm Shutdown"}
+              </p>
+              <p className="text-xs text-amber-700 mt-0.5">
+                {confirmAction === "reboot"
+                  ? "The server will restart. The dashboard will be unavailable for ~30 seconds."
+                  : "The server will power off completely. You will need physical access or a hosting panel to turn it back on."}
+              </p>
+              <div className="mt-3 flex gap-2">
+                <button
+                  onClick={confirmAction === "reboot" ? handleReboot : handleShutdown}
+                  className={`rounded-lg px-4 py-1.5 text-sm font-semibold text-white transition-colors ${
+                    confirmAction === "reboot"
+                      ? "bg-amber-600 hover:bg-amber-700"
+                      : "bg-red-600 hover:bg-red-700"
+                  }`}
+                >
+                  Yes, {confirmAction === "reboot" ? "Reboot" : "Shut Down"} Now
+                </button>
+                <button
+                  onClick={() => setConfirmAction(null)}
+                  className="rounded-lg border border-slate-200 px-4 py-1.5 text-sm font-medium text-gray-600 hover:bg-slate-50 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-3">
+          <button
+            onClick={() => setConfirmAction("reboot")}
+            disabled={rebooting || shuttingDown || !!confirmAction}
+            className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-5 py-2.5 text-sm font-semibold text-amber-700 transition-all hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {rebooting ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+            {rebooting ? "Rebooting…" : "Reboot Server"}
+          </button>
+
+          <button
+            onClick={() => setConfirmAction("shutdown")}
+            disabled={rebooting || shuttingDown || !!confirmAction}
+            className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-5 py-2.5 text-sm font-semibold text-red-700 transition-all hover:bg-red-100 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {shuttingDown ? <Loader2 className="h-4 w-4 animate-spin" /> : <Power className="h-4 w-4" />}
+            {shuttingDown ? "Shutting Down…" : "Shut Down Server"}
+          </button>
         </div>
       </div>
 

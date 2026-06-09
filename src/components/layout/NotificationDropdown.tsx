@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Bell, X, File, Image as ImageIcon, Video, Music, FileText, Archive, Code2, CheckCheck } from "lucide-react";
-import { apiInstance, FileData } from "@/lib/api";
+import { api, FileData } from "@/lib/api";
 
 function FileIcon({ type }: { type: FileData["type"] }) {
   const cls = "h-4 w-4";
@@ -57,9 +57,9 @@ export function NotificationDropdown() {
   useEffect(() => {
     if (!open) return;
     setLoading(true);
-    apiInstance.get<{ files: FileData[] }>("/list-files")
-      .then(res => {
-        const sorted = [...(res.data.files ?? [])].sort(
+    api.getFiles()
+      .then(data => {
+        const sorted = [...(data ?? [])].sort(
           (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         );
         setFiles(sorted.slice(0, 10));

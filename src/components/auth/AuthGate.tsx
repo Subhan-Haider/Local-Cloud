@@ -51,22 +51,56 @@ export function AuthGate({ children }: AuthGateProps) {
   const [mfaLoading, setMfaLoading] = useState(false);
   const [mfaError, setMfaError] = useState("");
   const [mfaVerified, setMfaVerified] = useState(false);
+  const [mfaInitDone, setMfaInitDone] = useState(false);
+
+  // Trigger website visit alert on mount
+  useEffect(() => {
+    api.alerts.visit().catch(() => {});
+  }, []);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
       setUser(u);
       if (u && !mfaPending && !mfaVerified) {
         try {
-          // Immediately test backend auth. If this returns 403, they aren't authorized.
-          await api.systemSettings.get();
-
-          // Check 2FA status immediately after login
+          // Check 2FA status — this also verifies the Firebase token is valid
           const { mfaEnabled, mfaMethod } = await api.mfa.status();
+
           if (mfaEnabled) {
-            setMfaMethod(mfaMethod);
-            setMfaPending(true);
-            if (mfaMethod === "email") {
-              await api.mfa.sendEmailCode();
+            // Check if we already have a valid MFA session (localStorage token)
+            const existingMfaToken = typeof window !== "undefined" ? localStorage.getItem("mfa_token") : null;
+            if (existingMfaToken) {
+              // Try a real authenticated call to verify the stored MFA token still works
+              try {
+                await api.getStats();
+                // MFA token is still valid — user is fully authenticated
+                setMfaVerified(true);
+                await api.alerts.login().catch(() => {});
+              } catch (authErr: any) {
+                // Stored MFA token is expired/invalid — force re-authentication
+                if (typeof window !== "undefined") localStorage.removeItem("mfa_token");
+                setMfaMethod(mfaMethod);
+                setMfaPending(true);
+                if (mfaMethod === "email") await api.mfa.sendEmailCode();
+              }
+            } else {
+              // No stored MFA token — show 2FA challenge
+              setMfaMethod(mfaMethod);
+              setMfaPending(true);
+              if (mfaMethod === "email") await api.mfa.sendEmailCode();
+            }
+          } else {
+            // No 2FA required — verify backend access then let in
+            try {
+              await api.getStats();
+              await api.alerts.login().catch(() => {});
+            } catch (err: any) {
+              if (err?.response?.status === 403) {
+                await auth.signOut();
+                setUser(null);
+                setError("Access Denied: Your email is not authorized to use this server.");
+                setMode("login");
+              }
             }
           }
         } catch (err: any) {
@@ -78,8 +112,15 @@ export function AuthGate({ children }: AuthGateProps) {
             setMode("login");
             return;
           }
-          // Otherwise let them in
+          // For other errors (server down, network issue), let them in optimistically
+        } finally {
+          setMfaInitDone(true);
         }
+      } else if (u && mfaVerified) {
+        // User is logged in and MFA already verified — mark init as done
+        setMfaInitDone(true);
+      } else if (!u) {
+        setMfaInitDone(true);
       }
     });
     return () => unsub();
@@ -137,6 +178,7 @@ export function AuthGate({ children }: AuthGateProps) {
       await api.mfa.login(mfaCode);
       setMfaVerified(true);
       setMfaPending(false);
+      await api.alerts.login().catch(() => {});
     } catch {
       setMfaError("Invalid code. Please check your authenticator app and try again.");
     } finally {
@@ -157,6 +199,7 @@ export function AuthGate({ children }: AuthGateProps) {
     setMfaMethod(null);
     setMfaVerified(false);
     setMfaCode("");
+    setMfaError("");
   };
 
   const handleResendEmailCode = async () => {
@@ -174,7 +217,7 @@ export function AuthGate({ children }: AuthGateProps) {
   }
 
   // ── Loading state ────────────────────────────────────────────────────────────
-  if (user === undefined) {
+  if (user === undefined || (user && !mfaInitDone && !mfaPending && !mfaVerified)) {
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-gradient-to-br from-slate-100 via-indigo-50 to-purple-50">
         <div className="flex flex-col items-center gap-4">
@@ -286,7 +329,7 @@ export function AuthGate({ children }: AuthGateProps) {
   }
 
   // ── Logged in with 2FA verified (or no 2FA) ──────────────────────────────────
-  if (user) return <>{children}</>;
+  if (user && (mfaInitDone || mfaVerified)) return <>{children}</>;
 
   // ── Login form ───────────────────────────────────────────────────────────────
   const modeConfig: Record<Mode, { heading: string; sub: string; icon: typeof KeyRound }> = {

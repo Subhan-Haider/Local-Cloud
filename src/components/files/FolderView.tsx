@@ -1,12 +1,13 @@
 "use client";
 
-import { Folder, X, Download } from "lucide-react";
+import { Folder, X, Download, Trash2 } from "lucide-react";
 
 interface FolderViewProps {
   folders: { name: string; count: number }[];
   activeFolder: string | null;
   onSelectFolder: (folder: string | null) => void;
   onDownloadFolder?: (folder: string) => void;
+  onDeleteFolder?: (folder: string) => void;
 }
 
 const FOLDER_COLORS = [
@@ -27,7 +28,7 @@ const FOLDER_ICON_COLORS = [
   "text-indigo-500",
 ];
 
-export function FolderView({ folders, activeFolder, onSelectFolder, onDownloadFolder }: FolderViewProps) {
+export function FolderView({ folders, activeFolder, onSelectFolder, onDownloadFolder, onDeleteFolder }: FolderViewProps) {
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
@@ -80,6 +81,20 @@ export function FolderView({ folders, activeFolder, onSelectFolder, onDownloadFo
                   title="Download Folder"
                 >
                   <Download className="h-4 w-4 text-gray-500 dark:text-gray-400" />
+                </div>
+              )}
+              {onDeleteFolder && (
+                <div
+                  role="button"
+                  tabIndex={0}
+                  className="ml-1 hidden p-1.5 rounded-md hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors group-hover:block"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDeleteFolder(folder.name);
+                  }}
+                  title="Delete Folder"
+                >
+                  <Trash2 className="h-4 w-4 text-red-400 hover:text-red-600" />
                 </div>
               )}
             </button>

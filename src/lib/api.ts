@@ -19,6 +19,14 @@ apiInstance.interceptors.request.use(async (config) => {
     const token = await user.getIdToken();
     config.headers["Authorization"] = `Bearer ${token}`;
   }
+  // Attach MFA token from localStorage as a header fallback
+  // (needed when Vercel proxy strips Set-Cookie headers from Express responses)
+  if (typeof window !== "undefined") {
+    const mfaToken = localStorage.getItem("mfa_token");
+    if (mfaToken) {
+      config.headers["x-mfa-token"] = mfaToken;
+    }
+  }
   return config;
 });
 
@@ -419,13 +427,32 @@ export const api = {
 
     /** Submit a 6-digit login code to receive the MFA session cookie */
     login: async (code: string): Promise<void> => {
-      await apiInstance.post("/api/auth/2fa/login", { code }, { withCredentials: true });
+      const { data } = await apiInstance.post("/api/auth/2fa/login", { code }, { withCredentials: true });
+      // Also store in localStorage as fallback when Vercel proxy strips Set-Cookie
+      if (data.mfaToken && typeof window !== "undefined") {
+        localStorage.setItem("mfa_token", data.mfaToken);
+      }
     },
 
     /** Clear the MFA session cookie on logout */
     logout: async (): Promise<void> => {
       await apiInstance.post("/api/auth/logout", {}, { withCredentials: true });
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("mfa_token");
+      }
     },
+  },
+
+  // ── ALERTS ─────────────────────────────────────────────────────────────────
+  alerts: {
+    /** Trigger an admin login alert email */
+    login: async (): Promise<void> => {
+      await apiInstance.post("/api/alerts/login");
+    },
+    /** Trigger a website visit alert email (rate limited on server) */
+    visit: async (): Promise<void> => {
+      await apiInstance.post("/api/alerts/visit").catch(() => {});
+    }
   },
 
   // ── Python Studio ────────────────────────────────────────────────────────────
@@ -450,6 +477,18 @@ export const api = {
       responseType: "text",
     });
     return typeof data === "string" ? data : JSON.stringify(data);
+  },
+
+  // ── SYSTEM CONTROLS ──────────────────────────────────────────────────────────
+  system: {
+    reboot: async (): Promise<{ success: boolean; message: string }> => {
+      const { data } = await apiInstance.post("/admin/system/reboot");
+      return data;
+    },
+    shutdown: async (): Promise<{ success: boolean; message: string }> => {
+      const { data } = await apiInstance.post("/admin/system/shutdown");
+      return data;
+    },
   },
 };
 
