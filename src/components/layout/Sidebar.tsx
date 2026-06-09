@@ -37,7 +37,7 @@ export function Sidebar() {
     api.getDiskInfo().then(setDiskInfo).catch(() => {});
   }, []);
 
-  if (pathname === "/privacy" || pathname === "/terms") {
+  if (pathname === "/privacy" || pathname === "/terms" || pathname === "/explore") {
     return null;
   }
 

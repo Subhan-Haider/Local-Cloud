@@ -3518,6 +3518,15 @@ app.post("/admin/system/shutdown", requireAuth, (req, res) => {
 });
 
 // =====================
+// PUBLIC ROUTES
+// =====================
+app.get("/api/public-files", (req, res) => {
+  // Return only files where isPublic is explicitly true
+  const publicFiles = fileCache.filter(file => file.isPublic === true);
+  res.json(publicFiles);
+});
+
+// =====================
 // HEALTH & GENERAL
 // =====================
 app.get("/api/health", (req, res) => {

@@ -212,7 +212,7 @@ export function AuthGate({ children }: AuthGateProps) {
   };
 
   // ── Public Routes Bypass ─────────────────────────────────────────────────────
-  if (pathname === "/privacy" || pathname === "/terms") {
+  if (pathname === "/privacy" || pathname === "/terms" || pathname === "/explore") {
     return <>{children}</>;
   }
 

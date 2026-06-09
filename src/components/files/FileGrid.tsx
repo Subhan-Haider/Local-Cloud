@@ -14,11 +14,12 @@ interface FileGridProps {
   onPreview: (file: FileData) => void;
   onRefresh?: () => void;
   isLoading?: boolean;
+  readOnly?: boolean;
 }
 
 export function FileGrid({
   files, selectedFiles, viewMode, onSelectFile,
-  onDelete, onRename, onMove, onShare, onTogglePrivacy, onPreview, onRefresh, isLoading,
+  onDelete, onRename, onMove, onShare, onTogglePrivacy, onPreview, onRefresh, isLoading, readOnly,
 }: FileGridProps) {
 
   if (isLoading) {
@@ -110,6 +111,7 @@ export function FileGrid({
             onTogglePrivacy={onTogglePrivacy}
             onPreview={onPreview}
             onRefresh={onRefresh}
+            readOnly={readOnly}
           />
         );
       })}

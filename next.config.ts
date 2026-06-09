@@ -56,6 +56,8 @@ const nextConfig: NextConfig = {
       { source: "/api/auth/:path*", destination: `${EXPRESS_API_URL}/api/auth/:path*` },
       // Alert endpoints (login & visit emails)
       { source: "/api/alerts/:path*", destination: `${EXPRESS_API_URL}/api/alerts/:path*` },
+      // Public files endpoint
+      { source: "/api/public-files", destination: `${EXPRESS_API_URL}/api/public-files` },
       // Health check
       { source: "/api/health", destination: `${EXPRESS_API_URL}/api/health` },
       // File & folder operations (rename, move, create, share)

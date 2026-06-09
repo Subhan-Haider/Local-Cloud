@@ -23,6 +23,7 @@ interface FileCardProps {
   onTogglePrivacy: (file: FileData) => void;
   onPreview: (file: FileData) => void;
   onRefresh?: () => void;
+  readOnly?: boolean;
 }
 
 function FileTypeIcon({ type, className }: { type: FileData["type"]; className?: string }) {
@@ -348,7 +349,7 @@ function EmailShareModal({ file, onClose }: { file: FileData; onClose: () => voi
 // ── Main FileCard ──────────────────────────────────────────────────────────────
 export function FileCard({
   file, isSelected, viewMode, onSelect, onDelete,
-  onRename, onMove, onShare, onTogglePrivacy, onPreview, onRefresh,
+  onRename, onMove, onShare, onTogglePrivacy, onPreview, onRefresh, readOnly,
 }: FileCardProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -422,9 +423,11 @@ export function FileCard({
         {[
           { icon: Eye,       label: "Preview",       action: () => { onPreview(file); setMenuOpen(false); }, color: "" },
           { icon: ExternalLink, label: "Open in New Tab", action: handleOpenNewTab, color: "" },
-          { icon: Edit3,     label: "Rename",        action: () => { onRename(file); setMenuOpen(false); }, color: "" },
-          { icon: Move,      label: "Move to...",    action: () => { onMove(file); setMenuOpen(false); }, color: "" },
-          { icon: pinned ? PinOff : Pin, label: pinned ? "Unpin File" : "Pin to Top", action: handlePin, color: pinned ? "text-amber-500 dark:text-amber-400" : "" },
+          ...(!readOnly ? [
+            { icon: Edit3,     label: "Rename",        action: () => { onRename(file); setMenuOpen(false); }, color: "" },
+            { icon: Move,      label: "Move to...",    action: () => { onMove(file); setMenuOpen(false); }, color: "" },
+            { icon: pinned ? PinOff : Pin, label: pinned ? "Unpin File" : "Pin to Top", action: handlePin, color: pinned ? "text-amber-500 dark:text-amber-400" : "" }
+          ] : [])
         ].map((item, i) => (
           <button key={i} onClick={item.action} className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-xs font-medium transition-colors hover:bg-slate-100 dark:hover:bg-white/5 ${item.color || "text-gray-700 dark:text-gray-300"}`}>
             <item.icon className="h-3.5 w-3.5 shrink-0" />
@@ -458,8 +461,10 @@ export function FileCard({
         <p className="px-2 pb-1 text-[9px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-600">Manage</p>
         {[
           { icon: Download,      label: "Download",     action: () => { window.open(file.url.replace("/file-serve/", "/file-download/")); setMenuOpen(false); } },
-          { icon: Clock,         label: file.expiresAt ? "Edit Expiry" : "Set Expiry", action: () => { setShowExpiry(true); setMenuOpen(false); }, color: file.expiresAt ? "text-amber-500 dark:text-amber-400" : "" },
-          { icon: file.isPublic ? ShieldAlert : ShieldCheck, label: file.isPublic ? "Make Private" : "Make Public", action: () => { onTogglePrivacy(file); setMenuOpen(false); }, color: file.isPublic ? "text-amber-500 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400" },
+          ...(!readOnly ? [
+            { icon: Clock,         label: file.expiresAt ? "Edit Expiry" : "Set Expiry", action: () => { setShowExpiry(true); setMenuOpen(false); }, color: file.expiresAt ? "text-amber-500 dark:text-amber-400" : "" },
+            { icon: file.isPublic ? ShieldAlert : ShieldCheck, label: file.isPublic ? "Make Private" : "Make Public", action: () => { onTogglePrivacy(file); setMenuOpen(false); }, color: file.isPublic ? "text-amber-500 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400" }
+          ] : [])
         ].map((item, i) => (
           <button key={i} onClick={item.action} className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-xs font-medium transition-colors hover:bg-slate-100 dark:hover:bg-white/5 ${item.color || "text-gray-700 dark:text-gray-300"}`}>
             <item.icon className="h-3.5 w-3.5 shrink-0" />
@@ -468,18 +473,21 @@ export function FileCard({
         ))}
       </div>
 
-      <div className="mx-2 my-1 border-t border-slate-100 dark:border-white/5" />
-
-      {/* Delete */}
-      <div className="px-2 pb-2">
-        <button
-          onClick={() => { onDelete(file.folder, file.name); setMenuOpen(false); }}
-          className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-xs font-medium text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/20"
-        >
-          <Trash2 className="h-3.5 w-3.5 shrink-0" />
-          Delete File
-        </button>
-      </div>
+      {/* Delete (Admin Only) */}
+      {!readOnly && (
+        <>
+          <div className="mx-2 my-1 border-t border-slate-100 dark:border-white/5" />
+          <div className="px-2 pb-2">
+            <button
+              onClick={() => { onDelete(file.folder, file.name); setMenuOpen(false); }}
+              className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-xs font-medium text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/20"
+            >
+              <Trash2 className="h-3.5 w-3.5 shrink-0" />
+              Delete File
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 

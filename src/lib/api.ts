@@ -100,6 +100,16 @@ export const api = {
     }));
   },
 
+  getPublicFiles: async (): Promise<FileData[]> => {
+    // Note: this endpoint is public and does not require auth headers, but we use apiInstance for consistency.
+    const { data } = await apiInstance.get("/api/public-files");
+    return data.map((f: FileData) => ({
+      ...f,
+      url: f.url.startsWith("http") ? f.url : `${API_BASE}${f.url}`,
+      thumbnailUrl: f.thumbnailUrl ? (f.thumbnailUrl.startsWith("http") ? f.thumbnailUrl : `${API_BASE}${f.thumbnailUrl}`) : null
+    }));
+  },
+
   getStats: async (): Promise<SystemStats> => {
     const { data } = await apiInstance.get("/admin/stats");
     return data;
