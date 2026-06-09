@@ -1,6 +1,6 @@
-# 🗄️ Storage Server v4
+# ☁️ LootOps Cloud
 
-> A robust, self-hosted file storage and management platform built with **Next.js 16**, **Express.js**, and **Firebase**. Supports secure file uploads, media processing, folder management, an in-browser **Python Studio**, two-factor authentication, analytics, webhooks, and more — all from a beautiful, modern dashboard.
+> A robust, self-hosted file storage and management platform built with **Next.js**, **Express.js**, and **Firebase**. Supports secure file uploads, media processing, folder management, an in-browser **Python Studio**, two-factor authentication, a beautiful **Public Explore Portal**, analytics, webhooks, and more — all from a modern dashboard.
 
 ---
 
@@ -57,6 +57,11 @@
 - Set **expiration dates** on share links
 - Optional **password protection** on shared links
 - Public share page accessible without login
+
+### 🖥️ Live Server Telemetry (New)
+- **Real-Time Hardware Graphs** — Beautiful, animated area charts showing live CPU load and Memory usage.
+- **Server-Sent Events (SSE)** — Highly efficient 1-second interval HTTP streaming with no WebSocket proxy overhead.
+- **Uptime Tracking** — Live tracker of your VPS host's system uptime.
 
 ### 📊 Analytics & Logs
 - Total upload and download byte counters
@@ -414,14 +419,16 @@ pm2 save
 
 ## 🔮 Future Roadmap & Ideas
 
-Here are some potential features planned or brainstormed for future updates to Blizflow Storage Server:
+LootOps Cloud is continuously evolving. Here are some potential features planned or brainstormed for future updates:
 
-- **🤖 AI & Smart Features:** Auto-tagging for images (e.g. "beach", "document"), OCR to extract and search text inside PDFs and images.
+- **🤖 Free Local AI Auto-tagging & OCR:** Automatically scan uploaded images (receipts, documents) using `tesseract.js` and apply searchable text tags to your files completely free, running entirely on your own server!
+- **🔗 Advanced Share Links:** Generate secure, temporary share links with optional passwords and expiration dates for private files.
+- **💬 File Comments & Activity Feed:** Keep track of who downloaded what, and allow comments on shared resources.
 - **📱 Media & Streaming:** A built-in media player for video/audio streaming and a photo gallery view with slideshows.
-- **🔐 Advanced Security:** End-to-End Encryption (E2EE) for client-side file encryption, and Role-Based Access Control (RBAC) for granular sharing permissions (Viewer, Editor).
-- **☁️ Collaboration:** Public "Drop Zones" for receiving files from guests, and the ability to leave comments or annotations on shared files.
+- **🔐 Advanced Security:** End-to-End Encryption (E2EE) for client-side file encryption, and Role-Based Access Control (RBAC) for granular sharing permissions.
+- **☁️ Collaboration:** Public "Drop Zones" for receiving files from guests.
 - **🛠️ Power-User Tools:** File versioning to restore overwritten files, and automated offsite backups to AWS S3 or Backblaze B2.
-- **🌐 Mobile App:** A companion iOS/Android app with an auto-camera-upload feature.
+- **🌐 Mobile App Companion:** A companion iOS/Android app to automatically backup photos directly to your LootOps Cloud.
 
 ---
 

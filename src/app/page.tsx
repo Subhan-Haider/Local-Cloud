@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Topbar } from "@/components/layout/Topbar";
 import { StatsCards } from "@/components/dashboard/StatsCards";
+import { ServerHealthMonitor } from "@/components/dashboard/ServerHealthMonitor";
 import { UploadSection } from "@/components/upload/UploadSection";
 import { FileGrid } from "@/components/files/FileGrid";
 import { FilePreviewModal } from "@/components/files/FilePreviewModal";
@@ -75,6 +76,8 @@ export default function Dashboard() {
         </div>
 
         <StatsCards statsData={stats} isLoading={loading} />
+        
+        <ServerHealthMonitor />
 
         <div className="space-y-4">
           <div className="flex items-center justify-between">

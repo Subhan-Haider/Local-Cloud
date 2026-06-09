@@ -13,6 +13,8 @@ const admin = require("./firebase-admin");
 const cookieParser = require("cookie-parser");
 const speakeasy = require("speakeasy");
 const qrcode = require("qrcode");
+const os = require("os");
+const osUtils = require("os-utils");
 require("dotenv").config({ path: path.join(__dirname, ".env.local") });
 
 const app = express();
@@ -3524,6 +3526,40 @@ app.get("/api/public-files", (req, res) => {
   // Return only files where isPublic is explicitly true
   const publicFiles = fileCache.filter(file => file.isPublic === true);
   res.json(publicFiles);
+});
+
+// =====================
+// SERVER SYSTEM METRICS (SSE)
+// =====================
+app.get("/admin/system/stream", requireAuth, (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders(); // flush the headers to establish SSE
+
+  const sendMetrics = () => {
+    osUtils.cpuUsage((cpuPercent) => {
+      const metrics = {
+        cpu: Math.round(cpuPercent * 100),
+        memory: Math.round((1 - osUtils.freememPercentage()) * 100),
+        uptime: os.uptime(),
+        timestamp: Date.now()
+      };
+      if (!res.writableEnded) {
+        res.write(`data: ${JSON.stringify(metrics)}\n\n`);
+      }
+    });
+  };
+
+  // Send first metric instantly
+  sendMetrics();
+  
+  // Stream metrics every 1 second
+  const intervalId = setInterval(sendMetrics, 1000);
+
+  req.on('close', () => {
+    clearInterval(intervalId);
+  });
 });
 
 // =====================
