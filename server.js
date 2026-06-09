@@ -3494,24 +3494,24 @@ app.delete("/admin/users/:uid", requireAuth, async (req, res) => {
 // SYSTEM CONTROLS
 // =====================
 
-// POST /admin/system/reboot  — runs `sudo reboot` on the host machine
+// POST /admin/system/reboot — reboots the host machine using provided password
 app.post("/admin/system/reboot", requireAuth, (req, res) => {
   logEvent("SYSTEM_REBOOT", { triggeredBy: req.user?.email || "unknown" });
   // Respond FIRST so the client receives the success before the connection drops
   res.json({ success: true, message: "Server is rebooting…" });
   setTimeout(() => {
-    exec("sudo reboot", (err) => {
+    exec("echo subhan | sudo -S reboot", (err) => {
       if (err) console.error("Reboot command failed:", err.message);
     });
   }, 500);
 });
 
-// POST /admin/system/shutdown — runs `sudo shutdown -h now`
+// POST /admin/system/shutdown — shuts down the host machine using provided password
 app.post("/admin/system/shutdown", requireAuth, (req, res) => {
   logEvent("SYSTEM_SHUTDOWN", { triggeredBy: req.user?.email || "unknown" });
   res.json({ success: true, message: "Server is shutting down…" });
   setTimeout(() => {
-    exec("sudo shutdown -h now", (err) => {
+    exec("echo subhan | sudo -S shutdown -h now", (err) => {
       if (err) console.error("Shutdown command failed:", err.message);
     });
   }, 500);

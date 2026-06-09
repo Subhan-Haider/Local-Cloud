@@ -412,6 +412,19 @@ pm2 save
 
 ---
 
+## 🔮 Future Roadmap & Ideas
+
+Here are some potential features planned or brainstormed for future updates to Blizflow Storage Server:
+
+- **🤖 AI & Smart Features:** Auto-tagging for images (e.g. "beach", "document"), OCR to extract and search text inside PDFs and images.
+- **📱 Media & Streaming:** A built-in media player for video/audio streaming and a photo gallery view with slideshows.
+- **🔐 Advanced Security:** End-to-End Encryption (E2EE) for client-side file encryption, and Role-Based Access Control (RBAC) for granular sharing permissions (Viewer, Editor).
+- **☁️ Collaboration:** Public "Drop Zones" for receiving files from guests, and the ability to leave comments or annotations on shared files.
+- **🛠️ Power-User Tools:** File versioning to restore overwritten files, and automated offsite backups to AWS S3 or Backblaze B2.
+- **🌐 Mobile App:** A companion iOS/Android app with an auto-camera-upload feature.
+
+---
+
 ## 📄 License
 
 This project is private and not licensed for public use.
