@@ -1,70 +1,75 @@
 services:
-  # ─────────────────────────────────────────────────────
-  # LootOps Cloud — Main Application
-  # Runs both the Next.js frontend (port 3000)
-  # and Express API backend (port 5000)
-  # ─────────────────────────────────────────────────────
   app:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: lootops_app
+    container_name: lootops
     restart: unless-stopped
+    image: lootops-cloud:latest
 
     ports:
-      - "3000:3000"   # Next.js UI
-      - "5000:5000"   # Express API
+      - "${NEXTJS_PORT:-3000}:3000"   # Next.js dashboard
+      - "${PORT:-5000}:5000"          # Express API
 
     volumes:
-      # Persistent storage for all uploaded files and the database
+      # All uploaded files and the db.json database live here.
+      # This volume persists across container restarts and upgrades.
       - lootops_data:/data/uploads
 
     environment:
-      # ── Server ─────────────────────────────────────────────────────────
-      PORT: 5000
-      UPLOAD_PATH: /data/uploads
-      SERVER_BASE_URL: ${SERVER_BASE_URL:-http://localhost:5000}
-      API_KEY: ${API_KEY}
+      # ── Server ───────────────────────────────────────────────────────
+      PORT:                 ${PORT:-5000}
+      NEXTJS_PORT:          ${NEXTJS_PORT:-3000}
+      UPLOAD_PATH:          /data/uploads
+      SERVER_BASE_URL:      ${SERVER_BASE_URL:-http://localhost:5000}
+      NEXT_PUBLIC_API_URL:  ${NEXT_PUBLIC_API_URL:-http://localhost:5000}
+      API_KEY:              ${API_KEY}
+      JWT_SECRET:           ${JWT_SECRET}
 
-      # ── Firebase Admin SDK (Server-side) ───────────────────────────────
-      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
+      # ── Firebase Admin SDK ────────────────────────────────────────────
+      FIREBASE_PROJECT_ID:   ${FIREBASE_PROJECT_ID}
       FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL}
-      FIREBASE_PRIVATE_KEY: ${FIREBASE_PRIVATE_KEY}
+      FIREBASE_PRIVATE_KEY:  ${FIREBASE_PRIVATE_KEY}
 
-      # ── Firebase Client (Next.js Frontend) ────────────────────────────
-      NEXT_PUBLIC_FIREBASE_API_KEY: ${NEXT_PUBLIC_FIREBASE_API_KEY}
-      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}
-      NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${NEXT_PUBLIC_FIREBASE_PROJECT_ID}
-      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET}
+      # ── Firebase Client (Next.js) ─────────────────────────────────────
+      NEXT_PUBLIC_FIREBASE_API_KEY:             ${NEXT_PUBLIC_FIREBASE_API_KEY}
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN:         ${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID:          ${NEXT_PUBLIC_FIREBASE_PROJECT_ID}
+      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET:      ${NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET}
       NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID}
-      NEXT_PUBLIC_FIREBASE_APP_ID: ${NEXT_PUBLIC_FIREBASE_APP_ID}
+      NEXT_PUBLIC_FIREBASE_APP_ID:              ${NEXT_PUBLIC_FIREBASE_APP_ID}
 
-      # ── API URL (used by Next.js to reach Express) ─────────────────────
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:5000}
-
-      # ── SMTP / Email (Optional) ────────────────────────────────────────
+      # ── SMTP / Email (Optional) ───────────────────────────────────────
       SMTP_ENABLED: ${SMTP_ENABLED:-false}
-      SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_SECURE: ${SMTP_SECURE:-false}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASS: ${SMTP_PASS:-}
-      SMTP_FROM: ${SMTP_FROM:-}
-      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      SMTP_HOST:    ${SMTP_HOST:-}
+      SMTP_PORT:    ${SMTP_PORT:-587}
+      SMTP_SECURE:  ${SMTP_SECURE:-false}
+      SMTP_USER:    ${SMTP_USER:-}
+      SMTP_PASS:    ${SMTP_PASS:-}
+      SMTP_FROM:    ${SMTP_FROM:-}
+      ADMIN_EMAIL:  ${ADMIN_EMAIL:-}
 
-      NODE_ENV: production
+      NODE_ENV:                production
       NEXT_TELEMETRY_DISABLED: 1
 
+    # Checks that both the API and UI are responding
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5000/health"]
+      test: >
+        sh -c "wget -qO- http://localhost:5000/health > /dev/null &&
+               wget -qO- http://localhost:3000/api/health > /dev/null"
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 60s
 
-# ─────────────────────────────────────────────────────
-# Named volume — your uploaded files live here
-# ─────────────────────────────────────────────────────
+    # Log settings — keeps container logs from growing unbounded
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# ── Persistent volume for all user data ────────────────────────────────────────
 volumes:
   lootops_data:
     driver: local

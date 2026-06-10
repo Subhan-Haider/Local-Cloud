@@ -1,7 +1,7 @@
-# ── Stage 1: Dependencies ──────────────────────────────────────────────────────
+# ── Stage 1: Install dependencies ─────────────────────────────────────────────
 FROM node:20-alpine AS deps
 
-# Install build tools needed for native modules (sharp, etc.)
+# Build tools needed for native modules (sharp, canvas, etc.)
 RUN apk add --no-cache libc6-compat python3 make g++
 
 WORKDIR /app
@@ -19,14 +19,13 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Build the Next.js production bundle
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
-# ── Stage 3: Production Runtime ────────────────────────────────────────────────
+# ── Stage 3: Lean Production Runtime ───────────────────────────────────────────
 FROM node:20-alpine AS runner
 
-# Install ffmpeg for video processing and tini for proper signal handling
+# ffmpeg → video processing | tini → proper PID 1 signal handling
 RUN apk add --no-cache ffmpeg tini
 
 WORKDIR /app
@@ -34,30 +33,38 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# Create a non-root user for security
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 appuser
+# Non-root user for security
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser  --system --uid 1001 appuser
 
-# Copy built Next.js app
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/public ./public
+# ── Copy Next.js standalone server into /app/ui/ ──────────────────────────────
+# IMPORTANT: Next.js standalone output includes its own server.js.
+# We put it in a SEPARATE directory (/app/ui/) so it does NOT collide
+# with our Express server.js at /app/api/server.js.
+COPY --from=builder /app/.next/standalone   /app/ui/
+COPY --from=builder /app/.next/static       /app/ui/.next/static
+COPY --from=builder /app/public             /app/ui/public
 
-# Copy Express backend and required files
-COPY --from=builder /app/server.js ./server.js
-COPY --from=builder /app/firebase-admin.js ./firebase-admin.js
-COPY --from=builder /app/node_modules ./node_modules
+# ── Copy Express API into /app/api/ ────────────────────────────────────────────
+COPY --from=builder /app/server.js          /app/api/server.js
+COPY --from=builder /app/firebase-admin.js  /app/api/firebase-admin.js
+COPY --from=builder /app/node_modules       /app/api/node_modules
 
-# Create uploads directory and set permissions
-RUN mkdir -p /data/uploads && chown -R appuser:nodejs /data /app
+# ── Copy startup script ────────────────────────────────────────────────────────
+COPY start.sh /app/start.sh
+RUN chmod +x /app/start.sh
+
+# ── Create persistent data directory ───────────────────────────────────────────
+RUN mkdir -p /data/uploads && \
+    chown -R appuser:nodejs /data /app
 
 USER appuser
 
-# Expose Next.js (3000) and Express (5000) ports
+# Next.js UI (3000) and Express API (5000)
 EXPOSE 3000 5000
 
-# Use tini as PID 1 to handle signals correctly
+# tini handles signals properly (SIGTERM → graceful shutdown)
 ENTRYPOINT ["/sbin/tini", "--"]
 
-# Start both servers using a simple shell script
-CMD ["node", "server.js"]
+# start.sh launches both processes and waits on them
+CMD ["/bin/sh", "/app/start.sh"]
