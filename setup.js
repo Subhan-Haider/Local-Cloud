@@ -13,6 +13,7 @@ const fs       = require("fs");
 const path     = require("path");
 const os       = require("os");
 const net      = require("net");
+const { spawnSync } = require("child_process");
 
 // ── ANSI colors ───────────────────────────────────────────────────────────────
 const c = {
@@ -529,52 +530,41 @@ ADMIN_EMAIL=${adminEmail}
   print(`${c.bold}${c.green}  ✅  Setup complete! .env.local has been written.${c.reset}`);
   hr("═");
   print("");
-  print(`${c.bold}  Next steps:${c.reset}`);
+  print(`${c.bold}  ✅ Setup is entirely complete!${c.reset}`);
   print("");
-  print(`  ${c.cyan}1.${c.reset} ${bold("Create your upload directory:")} `);
-  if (isWindows) {
-    print(`     ${c.dim}mkdir "${uploadPath}"${c.reset}`);
-  } else {
-    print(`     ${c.dim}sudo mkdir -p ${uploadPath} && sudo chown $USER:$USER ${uploadPath}${c.reset}`);
-  }
-  print("");
-  print(`  ${c.cyan}2.${c.reset} ${bold("Start the application:")}`);
-  print(`     ${c.dim}npm install${c.reset}`);
-  print(`     ${c.dim}npm run dev${c.reset}          ← development`);
-  print(`     ${c.dim}npm run build && npm run start${c.reset}  ← production`);
-  print("");
-  print(`  ${c.cyan}3.${c.reset} ${bold("Or use Docker:")}`);
-  print(`     ${c.dim}docker compose up -d${c.reset}`);
-  print("");
-  print(`  ${c.cyan}4.${c.reset} ${bold("First login:")}`);
-  print(`     ${c.dim}Open ${baseUrl}:${nextPort} in your browser.${c.reset}`);
-  print(`     ${c.dim}Sign in with your Firebase account.${c.reset}`);
-  print(`     ${c.dim}Go to Settings → Security → Allowed Emails${c.reset}`);
-  print(`     ${c.dim}Add your email to lock down access.${c.reset}`);
-  print("");
-
-  if (!fbProjectId || !fbClientEmail || !fbApiKey) {
-    print("");
-    warn("Some Firebase values were left blank.");
-    info("  The server will start but authentication will not work until");
-    info("  you fill in the Firebase values in .env.local and restart.");
-    print("");
-  }
-
-  if (baseUrl.startsWith("http://") && !baseUrl.includes("localhost")) {
-    print("");
-    warn("You're using HTTP on a non-localhost domain.");
-    info("  For production, we strongly recommend setting up HTTPS.");
-    info("  Use Nginx + Certbot (Let's Encrypt) to get a free SSL cert:");
-    info("  https://certbot.eff.org/");
-    print("");
-  }
-
   print(`  ${c.dim}Your API key (save this somewhere safe):${c.reset}`);
   print(`  ${c.yellow}${apiKey}${c.reset}`);
   print("");
 
+  if (baseUrl.startsWith("http://") && !baseUrl.includes("localhost")) {
+    warn("You're using HTTP on a non-localhost domain.");
+    info("  For production, we strongly recommend setting up HTTPS.");
+    print("");
+  }
+
+  print(`  ${c.cyan}What would you like to do now?${c.reset}`);
+  print(`  1) Start locally    (runs 'npm install' then 'npm run dev')`);
+  print(`  2) Start via Docker (runs 'docker compose up -d')`);
+  print(`  3) Exit`);
+  print("");
+
+  const startChoice = await ask("Choose option (1/2/3)", "1");
   rl.close();
+
+  if (startChoice === "1") {
+    console.log(`\n  📦 Installing NPM dependencies...`);
+    spawnSync(/^win/.test(process.platform) ? 'npm.cmd' : 'npm', ["install"], { stdio: "inherit" });
+    console.log(`\n  🚀 Starting development server...`);
+    spawnSync(/^win/.test(process.platform) ? 'npm.cmd' : 'npm', ["run", "dev"], { stdio: "inherit" });
+  } else if (startChoice === "2") {
+    console.log(`\n  🐳 Starting Docker container...`);
+    spawnSync("docker", ["compose", "up", "-d"], { stdio: "inherit" });
+    console.log(`\n  ✅ Docker started!`);
+    console.log(`  Dashboard: ${baseUrl}:${nextPort}`);
+    console.log(`  Logs:      docker compose logs -f`);
+  } else {
+    console.log("\n  Bye!");
+  }
 }
 
 main().catch((err) => {
