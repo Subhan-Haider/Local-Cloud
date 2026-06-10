@@ -142,6 +142,54 @@ function getLocalIp() {
   return "localhost";
 }
 
+// ── Multiline JS Config reader ────────────────────────────────────────────────
+function askClientConfig() {
+  return new Promise((resolve) => {
+    print(`  ${c.cyan}?${c.reset} Paste the entire 'const firebaseConfig = { ... }' block here,`);
+    print(`    OR type 'manual' to enter fields one by one.`);
+    process.stdout.write(`  > `);
+
+    let buffer = "";
+
+    const onLine = (line) => {
+      line = line.trim();
+
+      if (line.toLowerCase() === "manual") {
+        rl.removeListener("line", onLine);
+        return resolve({ method: "manual" });
+      }
+
+      buffer += line + "\n";
+      
+      if (buffer.includes("}")) {
+        const apiKey = buffer.match(/apiKey:\s*['"]([^'"]+)['"]/);
+        const authDomain = buffer.match(/authDomain:\s*['"]([^'"]+)['"]/);
+        const projectId = buffer.match(/projectId:\s*['"]([^'"]+)['"]/);
+        const storageBucket = buffer.match(/storageBucket:\s*['"]([^'"]+)['"]/);
+        const messagingSenderId = buffer.match(/messagingSenderId:\s*['"]([^'"]+)['"]/);
+        const appId = buffer.match(/appId:\s*['"]([^'"]+)['"]/);
+
+        if (apiKey && authDomain && projectId) {
+          rl.removeListener("line", onLine);
+          return resolve({
+            method: "parsed",
+            data: {
+              apiKey: apiKey[1],
+              authDomain: authDomain[1],
+              projectId: projectId[1],
+              storageBucket: storageBucket ? storageBucket[1] : "",
+              messagingSenderId: messagingSenderId ? messagingSenderId[1] : "",
+              appId: appId ? appId[1] : ""
+            }
+          });
+        }
+      }
+    };
+
+    rl.on("line", onLine);
+  });
+}
+
 // ── Check for available ports ──────────────────────────────────────────────────
 function findAvailablePort(startPort) {
   return new Promise((resolve) => {
@@ -325,12 +373,27 @@ async function main() {
   info("  3. Copy the config values shown in the firebaseConfig object");
   print("");
 
-  const fbApiKey            = await ask("NEXT_PUBLIC_FIREBASE_API_KEY           ");
-  const fbAuthDomain        = await ask("NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN       ");
-  const fbPublicProjectId   = fbProjectId || await ask("NEXT_PUBLIC_FIREBASE_PROJECT_ID       ", fbProjectId);
-  const fbStorageBucket     = await ask("NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET   ");
-  const fbMessagingSenderId = await ask("NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID");
-  const fbAppId             = await ask("NEXT_PUBLIC_FIREBASE_APP_ID            ");
+  const clientChoice = await askClientConfig();
+  
+  let fbApiKey = "", fbAuthDomain = "", fbPublicProjectId = "", fbStorageBucket = "", fbMessagingSenderId = "", fbAppId = "";
+
+  if (clientChoice.method === "parsed") {
+    fbApiKey = clientChoice.data.apiKey;
+    fbAuthDomain = clientChoice.data.authDomain;
+    fbPublicProjectId = clientChoice.data.projectId;
+    fbStorageBucket = clientChoice.data.storageBucket;
+    fbMessagingSenderId = clientChoice.data.messagingSenderId;
+    fbAppId = clientChoice.data.appId;
+    info(`  ${c.green}✓${c.reset} Successfully extracted client config for: ${fbPublicProjectId}`);
+  } else {
+    print("");
+    fbApiKey            = await ask("NEXT_PUBLIC_FIREBASE_API_KEY           ");
+    fbAuthDomain        = await ask("NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN       ");
+    fbPublicProjectId   = fbProjectId || await ask("NEXT_PUBLIC_FIREBASE_PROJECT_ID       ", fbProjectId);
+    fbStorageBucket     = await ask("NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET   ");
+    fbMessagingSenderId = await ask("NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID");
+    fbAppId             = await ask("NEXT_PUBLIC_FIREBASE_APP_ID            ");
+  }
 
   // ════════════════════════════════════════════════════════════════════
   // STEP 5 — SMTP / Email (Optional)
