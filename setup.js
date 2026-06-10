@@ -192,13 +192,40 @@ async function main() {
   // ════════════════════════════════════════════════════════════════════
   section("STEP 2 — File Storage");
   info("Where uploaded files will be stored on disk.");
-  info("Docker users: use /data/uploads (mapped to a Docker volume).");
-  info("Manual/VPS users: use any directory you have write access to.");
+  
+  const isWindows = process.platform === "win32";
+  const defaultLocal = path.join(__dirname, "uploads");
+
+  print(`  1) Docker (recommended) -> /data/uploads`);
+  print(`  2) Local Folder         -> ${defaultLocal}`);
+  print(`  3) Custom Path`);
   print("");
 
-  const isWindows   = process.platform === "win32";
-  const defaultPath = isWindows ? "C:\\lootops\\uploads" : "/var/www/lootops/uploads";
-  const uploadPath  = await ask("Upload storage directory", defaultPath);
+  const storageChoice = await ask("Choose storage method (1/2/3)", "1");
+  
+  let uploadPath = "/data/uploads";
+  if (storageChoice === "2") {
+    uploadPath = defaultLocal;
+  } else if (storageChoice === "3") {
+    const customDefault = isWindows ? "C:\\lootops\\uploads" : "/var/www/lootops/uploads";
+    uploadPath = await ask("Enter custom upload directory path", customDefault);
+  }
+
+  // Auto-create directory for local setups
+  if (storageChoice !== "1") {
+    if (!fs.existsSync(uploadPath)) {
+      try {
+        fs.mkdirSync(uploadPath, { recursive: true });
+        info(`  ${c.green}✓${c.reset} Automatically created directory: ${uploadPath}`);
+      } catch (e) {
+        warn(`Could not automatically create ${uploadPath}. You may need to create it manually or check permissions.`);
+      }
+    } else {
+      info(`  ${c.green}✓${c.reset} Using existing directory: ${uploadPath}`);
+    }
+  } else {
+    info(`  ${c.green}✓${c.reset} Docker volume path selected: ${uploadPath}`);
+  }
 
   // ════════════════════════════════════════════════════════════════════
   // STEP 3 — Firebase Admin SDK
