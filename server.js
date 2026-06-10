@@ -3055,8 +3055,46 @@ app.get("/admin/folder-tree", requireAuth, (req, res) => {
     const db = readDb();
     const files = fileCache;
 
-    // Build tree from folders found in fileCache
     const tree = {};
+
+    function addPathToTree(fullPath, isRoot = false) {
+      const parts = isRoot ? ["root"] : fullPath.split("/");
+      let node = tree;
+      parts.forEach((part, idx) => {
+        if (!node[part]) {
+          node[part] = {
+            name: part,
+            path: parts.slice(0, idx + 1).join("/"),
+            fileCount: 0,
+            sizeBytes: 0,
+            meta: db.folders && db.folders[parts.slice(0, idx + 1).join("/")] ? db.folders[parts.slice(0, idx + 1).join("/")] : {},
+            children: {}
+          };
+        }
+        node = node[part].children;
+      });
+    }
+
+    // 1. Always ensure root exists
+    addPathToTree("root", true);
+
+    // 2. Add all physical folders
+    function getDirectories(dirPath) {
+      if (!fs.existsSync(dirPath)) return;
+      const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+      entries.forEach((entry) => {
+        if (entry.name === "db.json" || entry.name === "_thumbnails" || entry.name === "_trash") return;
+        if (entry.isDirectory()) {
+          const fullPath = path.join(dirPath, entry.name);
+          const relativePath = path.relative(UPLOAD_PATH, fullPath).replace(/\\/g, "/");
+          addPathToTree(relativePath);
+          getDirectories(fullPath);
+        }
+      });
+    }
+    getDirectories(UPLOAD_PATH);
+
+    // 3. Add files (populating sizes and counts)
     files.forEach(f => {
       const parts = f.folder === "root" ? ["root"] : f.folder.split("/");
       let node = tree;
@@ -3067,7 +3105,7 @@ app.get("/admin/folder-tree", requireAuth, (req, res) => {
             path: parts.slice(0, idx + 1).join("/"),
             fileCount: 0,
             sizeBytes: 0,
-            meta: db.folders[parts.slice(0, idx + 1).join("/")] || {},
+            meta: db.folders && db.folders[parts.slice(0, idx + 1).join("/")] ? db.folders[parts.slice(0, idx + 1).join("/")] : {},
             children: {}
           };
         }

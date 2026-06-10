@@ -21,9 +21,10 @@ interface FolderRowProps {
   node: FolderTreeNode;
   depth: number;
   onRefresh: () => void;
+  onMoveFolder: (source: string, dest: string) => void;
 }
 
-function FolderRow({ node, depth, onRefresh }: FolderRowProps) {
+function FolderRow({ node, depth, onRefresh, onMoveFolder }: FolderRowProps) {
   const { success, error: toastError } = useToast();
   const [expanded, setExpanded] = useState(depth === 0);
   const [renaming, setRenaming] = useState(false);
@@ -89,6 +90,30 @@ function FolderRow({ node, depth, onRefresh }: FolderRowProps) {
   return (
     <div>
       <div
+        draggable
+        onDragStart={(e) => {
+          e.dataTransfer.setData("application/json", JSON.stringify({ type: "folder", folderPath: node.path }));
+          e.dataTransfer.effectAllowed = "move";
+        }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.currentTarget.classList.add("ring-2", "ring-indigo-500", "bg-indigo-50", "dark:bg-indigo-950/40");
+        }}
+        onDragLeave={(e) => {
+          e.currentTarget.classList.remove("ring-2", "ring-indigo-500", "bg-indigo-50", "dark:bg-indigo-950/40");
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.currentTarget.classList.remove("ring-2", "ring-indigo-500", "bg-indigo-50", "dark:bg-indigo-950/40");
+          const data = e.dataTransfer.getData("application/json");
+          if (!data) return;
+          try {
+            const payload = JSON.parse(data);
+            if (payload.type === "folder" && payload.folderPath !== node.path) {
+              onMoveFolder(payload.folderPath, node.path);
+            }
+          } catch (err) {}
+        }}
         className={`group flex items-center gap-2 rounded-xl px-3 py-2.5 transition-all hover:bg-slate-50 dark:hover:bg-slate-800/50 ${
           depth === 0 ? "border border-slate-200 dark:border-slate-800 bg-white dark:bg-gray-900 shadow-sm mb-1" : "mb-0.5"
         }`}
@@ -195,7 +220,7 @@ function FolderRow({ node, depth, onRefresh }: FolderRowProps) {
       {expanded && (
         <div>
           {node.children?.map(child => (
-            <FolderRow key={child.path} node={child} depth={depth + 1} onRefresh={onRefresh} />
+            <FolderRow key={child.path} node={child} depth={depth + 1} onRefresh={onRefresh} onMoveFolder={onMoveFolder} />
           ))}
 
           {/* Add subfolder input */}
@@ -261,6 +286,16 @@ export default function FoldersPage() {
       setLoading(false);
     }
   }, [toastError]);
+
+  const handleMoveFolder = async (sourceFolder: string, destFolder: string) => {
+    try {
+      await api.moveFolder(sourceFolder, destFolder);
+      success(`Moved ${sourceFolder} into ${destFolder}`);
+      loadData();
+    } catch {
+      toastError(`Failed to move ${sourceFolder}`);
+    }
+  };
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -358,7 +393,7 @@ export default function FoldersPage() {
           ) : (
             <div className="space-y-1">
               {tree.map(node => (
-                <FolderRow key={node.path} node={node} depth={0} onRefresh={loadData} />
+                <FolderRow key={node.path} node={node} depth={0} onRefresh={loadData} onMoveFolder={handleMoveFolder} />
               ))}
             </div>
           )}
@@ -367,7 +402,7 @@ export default function FoldersPage() {
         {/* Legend */}
         {tree.length > 0 && (
           <p className="text-xs text-gray-400 text-center">
-            Hover over a folder to <span className="font-semibold">rename</span>, add a <span className="font-semibold">subfolder</span>, or <span className="font-semibold">delete</span> it. Click the name to browse files.
+            Hover over a folder to <span className="font-semibold">rename</span>, add a <span className="font-semibold">subfolder</span>, or <span className="font-semibold">delete</span> it. Click the name to browse files. You can also <span className="font-semibold">drag and drop</span> folders to move them.
           </p>
         )}
 

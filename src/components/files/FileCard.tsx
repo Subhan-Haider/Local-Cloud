@@ -415,6 +415,12 @@ export function FileCard({
     }
   }, [file.folder, file.name, success, toastError, onRefresh]);
 
+  const handleDragStart = (e: React.DragEvent) => {
+    if (readOnly) return;
+    e.dataTransfer.setData("application/json", JSON.stringify({ type: "file", file }));
+    e.dataTransfer.effectAllowed = "move";
+  };
+
   const MenuItems = () => (
     <div className="absolute right-0 top-full z-50 mt-1 w-52 overflow-hidden rounded-xl border border-slate-200/60 bg-white shadow-2xl shadow-slate-200/50 dark:border-slate-700/60 dark:bg-[#0d1017] dark:shadow-black/60">
       {/* Group 1: View */}
@@ -499,7 +505,10 @@ export function FileCard({
 
       {/* ─── GRID VIEW ──────────────────────────────────────────────── */}
       {viewMode === "grid" ? (
-        <div className={`group relative flex flex-col rounded-2xl border transition-all duration-200 overflow-visible ${
+        <div 
+          draggable={!readOnly}
+          onDragStart={handleDragStart}
+          className={`group relative flex flex-col rounded-2xl border transition-all duration-200 overflow-visible ${
           isSelected
             ? "border-indigo-400 ring-2 ring-indigo-400/30 dark:border-indigo-500"
             : "border-slate-200/60 hover:border-slate-300 dark:border-slate-800/60 dark:hover:border-slate-700"
@@ -595,7 +604,10 @@ export function FileCard({
         </div>
       ) : (
         /* ─── LIST VIEW ─────────────────────────────────────────────── */
-        <div className={`relative flex items-center gap-3 border-b px-4 py-3 transition-colors ${
+        <div 
+          draggable={!readOnly}
+          onDragStart={handleDragStart}
+          className={`relative flex items-center gap-3 border-b px-4 py-3 transition-colors ${
           isSelected ? "bg-indigo-50/50 dark:bg-indigo-950/10" : "hover:bg-slate-50/60 dark:hover:bg-slate-800/20"
         } border-slate-100 dark:border-slate-800/60 ${menuOpen ? "z-50" : "z-0"}`}>
           <input type="checkbox" checked={isSelected} onChange={onSelect}

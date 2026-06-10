@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Folder, X, Download, Trash2, Plus, Check } from "lucide-react";
+import { useState, useRef } from "react";
+import { Folder, X, Download, Trash2, Plus, Check, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface FolderViewProps {
   folders: { path: string; name: string; count: number }[];
@@ -10,6 +10,8 @@ interface FolderViewProps {
   onDownloadFolder?: (folder: string) => void;
   onDeleteFolder?: (folder: string) => void;
   onCreateFolder?: (folder: string) => Promise<void>;
+  onMoveFile?: (file: any, destFolder: string) => void;
+  onMoveFolder?: (sourceFolder: string, destFolder: string) => void;
 }
 
 const FOLDER_COLORS = [
@@ -30,9 +32,43 @@ const FOLDER_ICON_COLORS = [
   "text-indigo-500",
 ];
 
-export function FolderView({ folders, activeFolder, onSelectFolder, onDownloadFolder, onDeleteFolder, onCreateFolder }: FolderViewProps) {
+export function FolderView({ folders, activeFolder, onSelectFolder, onDownloadFolder, onDeleteFolder, onCreateFolder, onMoveFile, onMoveFolder }: FolderViewProps) {
   const [isCreating, setIsCreating] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
+  
+  // Drag to scroll state
+  const [isDragging, setIsDragging] = useState(false);
+  const [startX, setStartX] = useState(0);
+  const [scrollLeft, setScrollLeft] = useState(0);
+
+  const scroll = (direction: "left" | "right") => {
+    if (scrollRef.current) {
+      const scrollAmount = 300;
+      scrollRef.current.scrollBy({ left: direction === "left" ? -scrollAmount : scrollAmount, behavior: "smooth" });
+    }
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (!scrollRef.current) return;
+    if ((e.target as HTMLElement).tagName.toLowerCase() === 'button' || (e.target as HTMLElement).closest('button') || (e.target as HTMLElement).tagName.toLowerCase() === 'input') {
+      return;
+    }
+    setIsDragging(true);
+    setStartX(e.pageX - scrollRef.current.offsetLeft);
+    setScrollLeft(scrollRef.current.scrollLeft);
+  };
+
+  const handleMouseLeave = () => setIsDragging(false);
+  const handleMouseUp = () => setIsDragging(false);
+  
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDragging || !scrollRef.current) return;
+    e.preventDefault();
+    const x = e.pageX - scrollRef.current.offsetLeft;
+    const walk = (x - startX) * 2;
+    scrollRef.current.scrollLeft = scrollLeft - walk;
+  };
 
   const handleCreate = async () => {
     if (!newFolderName.trim() || !onCreateFolder) return;
@@ -56,8 +92,23 @@ export function FolderView({ folders, activeFolder, onSelectFolder, onDownloadFo
           </button>
         )}
       </div>
-      <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
-        {/* Create Folder Button/Input */}
+      <div className="relative group/slider">
+        <button
+          onClick={() => scroll("left")}
+          className="absolute -left-3 top-1/2 -translate-y-1/2 z-10 hidden items-center justify-center h-8 w-8 rounded-full bg-white/90 shadow-md border border-slate-200 text-slate-600 hover:bg-white hover:text-indigo-600 dark:bg-gray-800/90 dark:border-slate-700 dark:text-slate-300 dark:hover:text-indigo-400 group-hover/slider:flex transition-all"
+        >
+          <ChevronLeft className="h-5 w-5" />
+        </button>
+
+        <div 
+          ref={scrollRef} 
+          className={`flex gap-3 overflow-x-auto pb-2 scrollbar-hide w-full ${isDragging ? "cursor-grabbing" : "cursor-grab"}`}
+          onMouseDown={handleMouseDown}
+          onMouseLeave={handleMouseLeave}
+          onMouseUp={handleMouseUp}
+          onMouseMove={handleMouseMove}
+        >
+          {/* Create Folder Button/Input */}
         {onCreateFolder && (
           isCreating ? (
             <div className="flex shrink-0 items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-3 dark:border-indigo-800/40 dark:bg-indigo-950/20">
@@ -97,6 +148,34 @@ export function FolderView({ folders, activeFolder, onSelectFolder, onDownloadFo
           return (
             <button
               key={folder.path}
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData("application/json", JSON.stringify({ type: "folder", folderPath: folder.path }));
+                e.dataTransfer.effectAllowed = "move";
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.currentTarget.classList.add("ring-2", "ring-indigo-500", "scale-[1.02]", "bg-indigo-50", "dark:bg-indigo-950/40");
+              }}
+              onDragLeave={(e) => {
+                e.currentTarget.classList.remove("ring-2", "ring-indigo-500", "scale-[1.02]", "bg-indigo-50", "dark:bg-indigo-950/40");
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.currentTarget.classList.remove("ring-2", "ring-indigo-500", "scale-[1.02]", "bg-indigo-50", "dark:bg-indigo-950/40");
+                const data = e.dataTransfer.getData("application/json");
+                if (!data) return;
+                try {
+                  const payload = JSON.parse(data);
+                  if (payload.type === "file" && onMoveFile) {
+                    onMoveFile(payload.file, folder.path);
+                  } else if (payload.type === "folder" && onMoveFolder) {
+                    if (payload.folderPath !== folder.path) {
+                      onMoveFolder(payload.folderPath, folder.path);
+                    }
+                  }
+                } catch (err) {}
+              }}
               onClick={() => onSelectFolder(isActive ? null : folder.path)}
               className={`group flex shrink-0 items-center gap-3 rounded-xl border px-4 py-3 transition-all ${
                 isActive
@@ -144,6 +223,14 @@ export function FolderView({ folders, activeFolder, onSelectFolder, onDownloadFo
             </button>
           );
         })}
+        </div>
+
+        <button
+          onClick={() => scroll("right")}
+          className="absolute -right-3 top-1/2 -translate-y-1/2 z-10 hidden items-center justify-center h-8 w-8 rounded-full bg-white/90 shadow-md border border-slate-200 text-slate-600 hover:bg-white hover:text-indigo-600 dark:bg-gray-800/90 dark:border-slate-700 dark:text-slate-300 dark:hover:text-indigo-400 group-hover/slider:flex transition-all"
+        >
+          <ChevronRight className="h-5 w-5" />
+        </button>
       </div>
     </div>
   );

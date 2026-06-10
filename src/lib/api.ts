@@ -182,6 +182,13 @@ export const api = {
     await apiInstance.post("/move-file", { file, sourceFolder, destinationFolder });
   },
 
+  moveFolder: async (
+    sourceFolder: string,
+    destinationFolder: string
+  ): Promise<void> => {
+    await apiInstance.post("/admin/move-folder", { sourceFolder, destinationFolder });
+  },
+
   togglePrivacy: async (
     folder: string,
     name: string,

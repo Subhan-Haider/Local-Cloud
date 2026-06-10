@@ -260,6 +260,26 @@ export default function FilesPage() {
     }
   };
 
+  const handleMoveFile = async (file: FileData, destFolder: string) => {
+    try {
+      await api.moveFile(file.name, file.folder, destFolder);
+      success(`Moved ${file.name} to ${destFolder}`);
+      loadData();
+    } catch {
+      toastError(`Failed to move ${file.name}`);
+    }
+  };
+
+  const handleMoveFolder = async (sourceFolder: string, destFolder: string) => {
+    try {
+      await api.moveFolder(sourceFolder, destFolder);
+      success(`Moved ${sourceFolder} into ${destFolder}`);
+      loadData();
+    } catch {
+      toastError(`Failed to move ${sourceFolder}`);
+    }
+  };
+
   return (
     <>
       <Topbar onRefresh={loadData} />
@@ -269,7 +289,7 @@ export default function FilesPage() {
           <p className="text-sm text-gray-500 dark:text-gray-400">Manage all your uploaded files.</p>
         </div>
 
-        <FolderView folders={foldersList} activeFolder={activeFolder} onSelectFolder={setActiveFolder} onDownloadFolder={handleDownloadFolder} onDeleteFolder={handleDeleteFolder} onCreateFolder={handleCreateFolder} />
+        <FolderView folders={foldersList} activeFolder={activeFolder} onSelectFolder={setActiveFolder} onDownloadFolder={handleDownloadFolder} onDeleteFolder={handleDeleteFolder} onCreateFolder={handleCreateFolder} onMoveFile={handleMoveFile} onMoveFolder={handleMoveFolder} />
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           {/* Filters */}

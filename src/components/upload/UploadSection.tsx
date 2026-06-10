@@ -153,12 +153,65 @@ export function UploadSection({ existingFolders, onSuccess }: UploadSectionProps
     });
   }, [autoUpload, uploadFiles]);
 
-  const handleDrop = (e: React.DragEvent) => {
+  const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
     setDragActive(false);
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      handleFiles(Array.from(e.dataTransfer.files));
+
+    if (!e.dataTransfer.items || e.dataTransfer.items.length === 0) {
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        handleFiles(Array.from(e.dataTransfer.files));
+      }
+      return;
+    }
+
+    const files: File[] = [];
+
+    const getFileFromEntry = (entry: any): Promise<File> => {
+      return new Promise((resolve, reject) => {
+        entry.file(
+          (file: File) => {
+            Object.defineProperty(file, 'webkitRelativePath', {
+              value: entry.fullPath.substring(1), // remove leading slash
+              writable: false
+            });
+            resolve(file);
+          },
+          reject
+        );
+      });
+    };
+
+    const traverseFileTree = async (item: any) => {
+      if (item.isFile) {
+        const file = await getFileFromEntry(item);
+        files.push(file);
+      } else if (item.isDirectory) {
+        const dirReader = item.createReader();
+        const readEntries = () => {
+          return new Promise<any[]>((resolve, reject) => {
+            dirReader.readEntries(resolve, reject);
+          });
+        };
+        let entries = await readEntries();
+        while (entries.length > 0) {
+          for (const entry of entries) {
+            await traverseFileTree(entry);
+          }
+          entries = await readEntries();
+        }
+      }
+    };
+
+    for (let i = 0; i < e.dataTransfer.items.length; i++) {
+      const item = e.dataTransfer.items[i].webkitGetAsEntry();
+      if (item) {
+        await traverseFileTree(item);
+      }
+    }
+
+    if (files.length > 0) {
+      handleFiles(files);
     }
   };
 
