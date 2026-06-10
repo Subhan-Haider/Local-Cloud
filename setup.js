@@ -151,24 +151,32 @@ async function main() {
 
   const domain = await ask("Your server domain or IP", `http://${localIp}`);
 
-  // Normalize: strip trailing slash
-  const baseUrl = domain.replace(/\/$/, "");
+  // Normalize: strip trailing slash and ensure protocol
+  let baseUrl = domain.replace(/\/$/, "");
+  if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) {
+    // Auto-detect if it's a local IP/localhost vs a real domain
+    baseUrl = baseUrl.includes("localhost") || baseUrl.match(/^[0-9.]+$/)
+      ? `http://${baseUrl}`
+      : `https://${baseUrl}`;
+  }
 
   // Ports
   print("");
-  info("Port configuration (automatically checks for available ports):");
+  info("Checking for available ports...");
   
-  const suggestedExpressPort = await findAvailablePort(5000);
-  if (suggestedExpressPort !== 5000) {
-    warn(`Port 5000 is in use. Suggesting port ${suggestedExpressPort} instead.`);
+  const expressPort = await findAvailablePort(5000);
+  if (expressPort !== 5000) {
+    warn(`Port 5000 is in use. Automatically assigned port ${expressPort} for Express API.`);
+  } else {
+    info(`  ${c.green}✓${c.reset} Selected port ${expressPort} for Express API.`);
   }
-  const expressPort = await ask("Express API port", suggestedExpressPort.toString());
 
-  const suggestedNextPort = await findAvailablePort(3000);
-  if (suggestedNextPort !== 3000) {
-    warn(`Port 3000 is in use. Suggesting port ${suggestedNextPort} instead.`);
+  const nextPort = await findAvailablePort(3000);
+  if (nextPort !== 3000) {
+    warn(`Port 3000 is in use. Automatically assigned port ${nextPort} for Next.js UI.`);
+  } else {
+    info(`  ${c.green}✓${c.reset} Selected port ${nextPort} for Next.js UI.`);
   }
-  const nextPort = await ask("Next.js UI port  ", suggestedNextPort.toString());
 
   // Full URLs
   const expressUrl = baseUrl.includes(":") && !baseUrl.startsWith("http")
