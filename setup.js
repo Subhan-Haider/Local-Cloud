@@ -63,10 +63,58 @@ function ask(question, defaultVal = "", secret = false) {
       };
       process.stdin.on("data", onData);
     } else {
-      rl.question("", (answer) => {
-        resolve(answer.trim() || defaultVal);
-      });
+      rl.question("", (answer) => resolve(answer || defaultVal));
     }
+  });
+}
+
+// ── Multiline JSON/Path reader ─────────────────────────────────────────────────
+function askAdminSdk() {
+  return new Promise((resolve) => {
+    print(`  ${c.cyan}?${c.reset} Drag & drop your downloaded Firebase JSON file here,`);
+    print(`    OR paste the entire JSON text starting with '{',`);
+    print(`    OR type 'manual' to enter fields one by one.`);
+    process.stdout.write(`  > `);
+
+    let buffer = "";
+
+    const onLine = (line) => {
+      line = line.trim();
+
+      // Check if user wants manual entry
+      if (line.toLowerCase() === "manual") {
+        rl.removeListener("line", onLine);
+        return resolve({ method: "manual" });
+      }
+
+      // Check if user pasted a file path (handling quotes from drag/drop)
+      const cleanPath = line.replace(/^['"]|['"]$/g, "");
+      if (fs.existsSync(cleanPath) && fs.statSync(cleanPath).isFile()) {
+        try {
+          const content = fs.readFileSync(cleanPath, "utf8");
+          const parsed = JSON.parse(content);
+          rl.removeListener("line", onLine);
+          return resolve({ method: "parsed", data: parsed });
+        } catch (e) {
+          warn(`Could not read or parse JSON from file: ${e.message}`);
+          process.stdout.write(`  > `);
+          return;
+        }
+      }
+
+      // Otherwise, accumulate lines assuming it's a JSON paste
+      buffer += line + "\n";
+      
+      try {
+        const parsed = JSON.parse(buffer);
+        rl.removeListener("line", onLine);
+        return resolve({ method: "parsed", data: parsed });
+      } catch (e) {
+        // Not valid JSON yet, wait for more lines
+      }
+    };
+
+    rl.on("line", onLine);
   });
 }
 
@@ -239,13 +287,33 @@ async function main() {
   info("  5. Copy the values below from that JSON file");
   print("");
 
-  const fbProjectId    = await ask("Firebase Project ID         (e.g. my-project-12345)");
-  const fbClientEmail  = await ask("Firebase Client Email       (e.g. firebase-adminsdk-xxx@...)");
-  print("");
-  info("  For the private key, paste the ENTIRE value from the JSON file");
-  info("  including the BEGIN/END lines. Press ENTER twice when done.");
-  print("");
-  const fbPrivateKey = await ask("Firebase Private Key", "", false);
+  const adminSdkChoice = await askAdminSdk();
+
+  let fbProjectId = "";
+  let fbClientEmail = "";
+  let fbPrivateKey = "";
+
+  if (adminSdkChoice.method === "parsed") {
+    fbProjectId = adminSdkChoice.data.project_id || "";
+    fbClientEmail = adminSdkChoice.data.client_email || "";
+    fbPrivateKey = adminSdkChoice.data.private_key || "";
+    
+    if (fbProjectId && fbPrivateKey) {
+      info(`  ${c.green}✓${c.reset} Successfully extracted credentials for: ${fbProjectId}`);
+    } else {
+      warn("  JSON parsed, but missing project_id or private_key. You may need to enter manually.");
+    }
+  }
+
+  if (adminSdkChoice.method === "manual" || !fbProjectId || !fbPrivateKey) {
+    print("");
+    fbProjectId    = await ask("Firebase Project ID         (e.g. my-project-12345)");
+    fbClientEmail  = await ask("Firebase Client Email       (e.g. firebase-adminsdk-xxx@...)");
+    print("");
+    info("  Important: To paste a multiline private key manually without breaking,");
+    info("  replace line breaks with \\n OR paste the JSON file instead.");
+    fbPrivateKey = await ask("Firebase Private Key", "", false);
+  }
 
   // ════════════════════════════════════════════════════════════════════
   // STEP 4 — Firebase Client SDK (Frontend)
