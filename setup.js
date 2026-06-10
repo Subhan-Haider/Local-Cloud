@@ -515,7 +515,7 @@ SMTP_HOST=${smtpHost}
 SMTP_PORT=${smtpPort}
 SMTP_SECURE=${smtpSecure}
 SMTP_USER=${smtpUser}
-SMTP_PASS=${smtpPass}
+SMTP_PASS="${smtpPass}"
 SMTP_FROM=${smtpFrom}
 ADMIN_EMAIL=${adminEmail}
 `;
