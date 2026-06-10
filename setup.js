@@ -546,11 +546,47 @@ ADMIN_EMAIL=${adminEmail}
     const hostname = new URL(baseUrl).hostname;
     const isIP = /^[0-9.]+$/.test(hostname);
     if (!isIP && hostname !== "localhost") {
-      print(`  ${c.bold}🌐 DNS Configuration Required${c.reset}`);
-      print(`  To make your domain work, add this record in your DNS provider (e.g. Cloudflare, GoDaddy):`);
-      print(`  • Type:  ${c.cyan}A${c.reset}`);
-      print(`  • Name:  ${c.cyan}${hostname}${c.reset} (or @)`);
-      print(`  • Value: ${c.cyan}${localIp}${c.reset} (Replace with your server's public IP if different)`);
+      print(`  ${c.bold}🌐 Domain Configuration${c.reset}`);
+      
+      let dnsResolved = false;
+      try {
+        const dns = require('dns');
+        const addresses = await dns.promises.resolve4(hostname);
+        print(`  ${c.green}✓${c.reset} Domain resolves to: ${addresses.join(', ')}`);
+        dnsResolved = true;
+      } catch (e) {
+        print(`  ${c.yellow}⚠${c.reset} Domain does NOT resolve yet.`);
+      }
+
+      if (!dnsResolved) {
+        print(`  To connect your domain, add this record in your DNS provider (Cloudflare, Namecheap, etc):`);
+        print(`  • Type:  ${c.cyan}A${c.reset}`);
+        print(`  • Name:  ${c.cyan}${hostname}${c.reset} (or @ if root domain)`);
+        print(`  • Value: ${c.cyan}${localIp}${c.reset} (Replace with your server's public IP)`);
+      }
+      print("");
+
+      print(`  ${c.bold}🔒 SSL & Nginx Setup (Highly Recommended)${c.reset}`);
+      print(`  1. Install Nginx and Certbot:`);
+      print(`     ${c.dim}sudo apt install nginx certbot python3-certbot-nginx${c.reset}`);
+      print(`  2. Create an Nginx config:`);
+      print(`     ${c.dim}sudo nano /etc/nginx/sites-available/${hostname}${c.reset}`);
+      print(`     Paste the following inside:`);
+      print(`       ${c.cyan}server {${c.reset}`);
+      print(`           ${c.cyan}listen 80;${c.reset}`);
+      print(`           ${c.cyan}server_name ${hostname};${c.reset}`);
+      print(`           ${c.cyan}location / {${c.reset}`);
+      print(`               ${c.cyan}proxy_pass http://localhost:${nextPort};${c.reset}`);
+      print(`               ${c.cyan}proxy_http_version 1.1;${c.reset}`);
+      print(`               ${c.cyan}proxy_set_header Upgrade $http_upgrade;${c.reset}`);
+      print(`               ${c.cyan}proxy_set_header Connection 'upgrade';${c.reset}`);
+      print(`               ${c.cyan}proxy_set_header Host $host;${c.reset}`);
+      print(`               ${c.cyan}proxy_cache_bypass $http_upgrade;${c.reset}`);
+      print(`           ${c.cyan}}${c.reset}`);
+      print(`       ${c.cyan}}${c.reset}`);
+      print(`  3. Enable the site and get a free SSL certificate:`);
+      print(`     ${c.dim}sudo ln -s /etc/nginx/sites-available/${hostname} /etc/nginx/sites-enabled/${c.reset}`);
+      print(`     ${c.dim}sudo certbot --nginx -d ${hostname}${c.reset}`);
       print("");
     }
   } catch (e) {}
