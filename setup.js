@@ -409,13 +409,38 @@ async function main() {
 
   if (smtpEnabled.toLowerCase().startsWith("y")) {
     print("");
-    info("  Gmail users: use smtp.gmail.com with an App Password");
-    info("  (Google Account → Security → 2FA → App Passwords)");
+    print("  1) Gmail (Requires App Password)");
+    print("  2) Outlook / Office 365");
+    print("  3) Yahoo Mail (Requires App Password)");
+    print("  4) Custom SMTP");
     print("");
-    smtpHost    = await ask("SMTP Host   ", "smtp.gmail.com");
-    smtpPort    = await ask("SMTP Port   ", "587");
-    smtpSecure  = await ask("SMTP Secure (true for port 465)", "false");
-    smtpUser    = await ask("SMTP Email  ");
+    const providerChoice = await ask("Choose email provider (1/2/3/4)", "1");
+
+    if (providerChoice === "1") {
+      smtpHost = "smtp.gmail.com";
+      smtpPort = "587";
+      info("  Note: You MUST use an App Password, not your real Gmail password.");
+      info("  (Google Account → Security → 2-Step Verification → App Passwords)");
+    } else if (providerChoice === "2") {
+      smtpHost = "smtp-mail.outlook.com";
+      smtpPort = "587";
+    } else if (providerChoice === "3") {
+      smtpHost = "smtp.mail.yahoo.com";
+      smtpPort = "587";
+      info("  Note: You MUST use an App Password, not your real Yahoo password.");
+    } else {
+      smtpHost = await ask("SMTP Host   ", "smtp.example.com");
+      smtpPort = await ask("SMTP Port   ", "587");
+    }
+
+    if (providerChoice === "4") {
+      smtpSecure = await ask("SMTP Secure (true for port 465)", smtpPort === "465" ? "true" : "false");
+    } else {
+      smtpSecure = "false"; // 587 uses STARTTLS, which implies secure: false in Nodemailer
+    }
+
+    print("");
+    smtpUser    = await ask("SMTP Email Address");
     smtpPass    = await ask("SMTP Password / App Password", "", true);
     smtpFrom    = await ask("From address", smtpUser);
     adminEmail  = await ask("Admin notification email", smtpUser);
