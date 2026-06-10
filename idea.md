@@ -1,4 +1,4 @@
-# 🔮 LootOps Cloud — 50 Future Ideas
+# 🔮 LootOps  — 50 Future Ideas
 
 > A brainstormed roadmap of potential features, improvements, and power-user tools for future versions of LootOps Cloud. Each idea includes a full description of what it is, how it works, and why it matters.
 

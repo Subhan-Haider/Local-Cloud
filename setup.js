@@ -12,6 +12,7 @@ const crypto   = require("crypto");
 const fs       = require("fs");
 const path     = require("path");
 const os       = require("os");
+const net      = require("net");
 
 // ── ANSI colors ───────────────────────────────────────────────────────────────
 const c = {
@@ -93,6 +94,20 @@ function getLocalIp() {
   return "localhost";
 }
 
+// ── Check for available ports ──────────────────────────────────────────────────
+function findAvailablePort(startPort) {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.listen(startPort, () => {
+      server.once("close", () => resolve(startPort));
+      server.close();
+    });
+    server.on("error", () => {
+      resolve(findAvailablePort(startPort + 1));
+    });
+  });
+}
+
 // ── Main wizard ────────────────────────────────────────────────────────────────
 async function main() {
   console.clear();
@@ -141,9 +156,19 @@ async function main() {
 
   // Ports
   print("");
-  info("Port configuration (change if something else is already running):");
-  const expressPort = await ask("Express API port", "5000");
-  const nextPort    = await ask("Next.js UI port  ", "3000");
+  info("Port configuration (automatically checks for available ports):");
+  
+  const suggestedExpressPort = await findAvailablePort(5000);
+  if (suggestedExpressPort !== 5000) {
+    warn(`Port 5000 is in use. Suggesting port ${suggestedExpressPort} instead.`);
+  }
+  const expressPort = await ask("Express API port", suggestedExpressPort.toString());
+
+  const suggestedNextPort = await findAvailablePort(3000);
+  if (suggestedNextPort !== 3000) {
+    warn(`Port 3000 is in use. Suggesting port ${suggestedNextPort} instead.`);
+  }
+  const nextPort = await ask("Next.js UI port  ", suggestedNextPort.toString());
 
   // Full URLs
   const expressUrl = baseUrl.includes(":") && !baseUrl.startsWith("http")
