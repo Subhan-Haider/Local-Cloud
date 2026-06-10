@@ -91,7 +91,7 @@ function sendSystemAlertEmail(title, message, emoji = "🔔", eventType = null) 
           <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; text-align: left; margin-bottom: 30px;">
             <p style="margin: 0;"><strong style="color: #0f172a; width: 100px; display: inline-block;">Time:</strong> <span style="color: #475569;">${new Date().toLocaleString()}</span></p>
           </div>
-          <a href="https://storage.lootops.me" style="display: inline-block; background-color: #4f46e5; color: #ffffff; font-weight: 600; font-size: 16px; text-decoration: none; padding: 14px 28px; border-radius: 8px; transition: background-color 0.2s;">Go to Dashboard</a>
+          <a href="${BASE_URL}" style="display: inline-block; background-color: #4f46e5; color: #ffffff; font-weight: 600; font-size: 16px; text-decoration: none; padding: 14px 28px; border-radius: 8px; transition: background-color 0.2s;">Go to Dashboard</a>
         </div>
       </div>
     `
@@ -132,7 +132,7 @@ function sendUploadNotificationEmail(filename, folderName, fileSize) {
             <p style="margin: 0;"><strong style="color: #0f172a; width: 100px; display: inline-block;">Time:</strong> <span style="color: #475569;">${new Date().toLocaleString()}</span></p>
           </div>
           
-          <a href="https://storage.lootops.me/files" style="display: inline-block; background-color: #4f46e5; color: #ffffff; font-weight: 600; font-size: 16px; text-decoration: none; padding: 14px 28px; border-radius: 8px; transition: background-color 0.2s;">View in Dashboard</a>
+          <a href="${BASE_URL}/files" style="display: inline-block; background-color: #4f46e5; color: #ffffff; font-weight: 600; font-size: 16px; text-decoration: none; padding: 14px 28px; border-radius: 8px; transition: background-color 0.2s;">View in Dashboard</a>
         </div>
       </div>
     `
@@ -206,7 +206,7 @@ const DB_PATH = path.join(UPLOAD_PATH, "db.json");
 
 function readDb() {
   const defaultDb = {
-    files: {}, logs: [], shares: {}, users: {}, folders: {}, trash: {}, webhookUrl: "", mfaCodes: {}, analytics: { totalUploads: 0, totalDownloads: 0, dailyStats: {} }, settings: { allowedOrigins: [], allowedEmails: ["setupg98@gmail.com", "support@subhan.tech"], notificationEmails: ["support@subhan.tech"], notificationsEnabled: true, customBaseUrl: "" }
+    files: {}, logs: [], shares: {}, users: {}, folders: {}, trash: {}, webhookUrl: "", mfaCodes: {}, analytics: { totalUploads: 0, totalDownloads: 0, dailyStats: {} }, settings: { allowedOrigins: [], allowedEmails: [], notificationEmails: [], notificationsEnabled: true, customBaseUrl: "" }
   };
   if (!fs.existsSync(DB_PATH)) {
     return defaultDb;
@@ -222,9 +222,9 @@ function readDb() {
     if (!data.webhookUrl) data.webhookUrl = "";
     if (!data.mfaCodes) data.mfaCodes = {};
     if (!data.analytics) data.analytics = { totalUploads: 0, totalDownloads: 0, dailyStats: {} };
-    if (!data.settings) data.settings = { allowedOrigins: [], allowedEmails: ["setupg98@gmail.com", "support@subhan.tech"], notificationEmails: ["support@subhan.tech"], notificationsEnabled: true, customBaseUrl: "" };
-    if (!data.settings.allowedEmails) data.settings.allowedEmails = ["setupg98@gmail.com", "support@subhan.tech"];
-    if (!data.settings.notificationEmails) data.settings.notificationEmails = ["support@subhan.tech"];
+    if (!data.settings) data.settings = { allowedOrigins: [], allowedEmails: [], notificationEmails: [], notificationsEnabled: true, customBaseUrl: "" };
+    if (!data.settings.allowedEmails) data.settings.allowedEmails = [];
+    if (!data.settings.notificationEmails) data.settings.notificationEmails = [];
     if (data.settings.notificationsEnabled === undefined) data.settings.notificationsEnabled = true;
     if (data.settings.customBaseUrl === undefined) data.settings.customBaseUrl = "";
     if (!data.settings.notificationPreferences) data.settings.notificationPreferences = {
@@ -307,13 +307,14 @@ const requireAuth = async (req, res, next) => {
   try {
     const decoded = await admin.auth().verifyIdToken(token);
     
-    // Dynamic authorized emails from db.json (with hardcoded fallback)
+    // Dynamic authorized emails from db.json
+    // On first run (empty allowedEmails), any Firebase-verified user can log in
+    // and add themselves via Settings > Security > Allowed Emails.
     const dbData = readDb();
-    const authorizedEmails = dbData.settings?.allowedEmails?.length
-      ? dbData.settings.allowedEmails
-      : ["setupg98@gmail.com", "support@subhan.tech"];
+    const authorizedEmails = dbData.settings?.allowedEmails || [];
 
-    if (!authorizedEmails.includes(decoded.email)) {
+    // If allowedEmails list is empty, allow all authenticated Firebase users (open mode)
+    if (authorizedEmails.length > 0 && !authorizedEmails.includes(decoded.email)) {
       console.warn(`Unauthorized login attempt from: ${decoded.email}`);
       return res.status(403).json({ error: "Email not authorized", email: decoded.email });
     }
@@ -355,6 +356,13 @@ const requireAuth = async (req, res, next) => {
     return res.status(401).json({ error: "Invalid Firebase token" });
   }
 };
+
+// =====================
+// HEALTH CHECK
+// =====================
+app.get("/health", (req, res) => {
+  res.json({ status: "ok", uptime: process.uptime(), timestamp: new Date().toISOString() });
+});
 
 // =====================
 // ALERTS (Login / Visit)

@@ -1,46 +1,36 @@
 import type { NextConfig } from "next";
 
-// The Express API server URL (only used server-side for rewrites, never exposed to browser)
-// Set EXPRESS_API_URL in Vercel env vars (without NEXT_PUBLIC_ prefix)
-const EXPRESS_API_URL = "https://storage.lootops.me";
+// The Express API server URL — read from environment variable.
+// Docker users: set NEXT_PUBLIC_API_URL in docker-compose.yml (defaults to http://localhost:5000)
+// Vercel/remote users: set SERVER_BASE_URL in your environment
+const EXPRESS_API_URL =
+  process.env.SERVER_BASE_URL ||
+  process.env.NEXT_PUBLIC_API_URL ||
+  "http://localhost:5000";
 
 const nextConfig: NextConfig = {
+  // Required for Docker — generates a self-contained output in .next/standalone
+  output: "standalone",
+
   images: {
+    // Allow images from any hostname so self-hosted users don't need to configure this
     remotePatterns: [
       {
         protocol: "https",
-        hostname: "storage.lootops.me",
-        pathname: "/**",
-      },
-      {
-        protocol: "https",
-        hostname: "server.lootops.me",
-        pathname: "/**",
-      },
-      {
-        protocol: "https",
-        hostname: "storage.subhan.tech",
-        pathname: "/**",
-      },
-      {
-        protocol: "https",
-        hostname: "server.subhan.tech",
+        hostname: "**",
         pathname: "/**",
       },
       {
         protocol: "http",
-        hostname: "localhost",
-        port: "5000",
+        hostname: "**",
         pathname: "/**",
       },
     ],
   },
 
-  // ─── VERCEL / CROSS-DOMAIN FIX ─────────────────────────────────────────────
-  // When the frontend is on Vercel and Express is on a separate VPS,
-  // we can't use cross-domain cookies (MFA tokens, etc.).
-  // These rewrites make Vercel act as a transparent proxy for all Express routes,
-  // so the browser only ever talks to ONE domain → cookies work perfectly.
+  // ─── PROXY REWRITES ──────────────────────────────────────────────────────────
+  // These make Next.js act as a transparent proxy to Express.
+  // This means the browser always talks to ONE origin → cookies, auth, and CORS work correctly.
   async rewrites() {
     return [
       // Admin API
@@ -59,12 +49,14 @@ const nextConfig: NextConfig = {
       // Public files endpoint
       { source: "/api/public-files", destination: `${EXPRESS_API_URL}/api/public-files` },
       // Health check
-      { source: "/api/health", destination: `${EXPRESS_API_URL}/api/health` },
-      // File & folder operations (rename, move, create, share)
+      { source: "/api/health", destination: `${EXPRESS_API_URL}/health` },
+      // File & folder operations
       { source: "/rename", destination: `${EXPRESS_API_URL}/rename` },
       { source: "/move-file", destination: `${EXPRESS_API_URL}/move-file` },
       { source: "/create-folder", destination: `${EXPRESS_API_URL}/create-folder` },
       { source: "/share/:path*", destination: `${EXPRESS_API_URL}/share/:path*` },
+      // Generic API catch-all — proxies /api/* to Express
+      { source: "/api/:path*", destination: `${EXPRESS_API_URL}/api/:path*` },
     ];
   },
 };

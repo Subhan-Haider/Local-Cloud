@@ -1,0 +1,32 @@
+# ── Git ───────────────────────────────────────────────
+.git
+.gitignore
+
+# ── Node ──────────────────────────────────────────────
+node_modules
+npm-debug.log*
+
+# ── Next.js build output (rebuilt inside container) ──
+.next
+
+# ── Environment / Secrets (NEVER copy into image) ────
+.env*
+*.pem
+*.key
+
+# ── User data (mounted as Docker volume) ─────────────
+uploads/
+db.json
+
+# ── Dev/Editor artifacts ──────────────────────────────
+.DS_Store
+*.tsbuildinfo
+scratch/
+idea.md
+implementation_plan.md
+CLAUDE.md
+AGENTS.md
+
+# ── Test files ────────────────────────────────────────
+test.zip
+coverage/
