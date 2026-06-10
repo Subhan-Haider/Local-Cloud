@@ -1,13 +1,17 @@
 import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, NotificationPreferences } from "@/lib/api";
 import { useToast } from "@/components/ui/ToastProvider";
-import { Globe, Users, Plus, Trash2, Loader2, Bell, Link, Power, RefreshCw, AlertTriangle } from "lucide-react";
+import { Globe, Users, Plus, Trash2, Loader2, Bell, Link, Power, RefreshCw, AlertTriangle, Upload, Download, Trash, LogIn, Share2 } from "lucide-react";
 
 export function SystemSettings() {
   const [origins, setOrigins] = useState<string[]>([]);
   const [emails, setEmails] = useState<string[]>([]);
   const [notificationEmails, setNotificationEmails] = useState<string[]>([]);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [notificationPreferences, setNotificationPreferences] = useState<NotificationPreferences>({
+    onUpload: true, onDelete: true, onLogin: true, onDownload: false, onShare: true,
+  });
+  const [savingPrefs, setSavingPrefs] = useState(false);
   const [customBaseUrl, setCustomBaseUrl] = useState("");
   
   const [newOrigin, setNewOrigin] = useState("");
@@ -42,6 +46,7 @@ export function SystemSettings() {
       setEmails(data.allowedEmails || []);
       setNotificationEmails(data.notificationEmails || []);
       setNotificationsEnabled(data.notificationsEnabled ?? true);
+      setNotificationPreferences(data.notificationPreferences ?? { onUpload: true, onDelete: true, onLogin: true, onDownload: false, onShare: true });
       setCustomBaseUrl(data.customBaseUrl || "");
     } catch {
       error("Failed to load system settings");
@@ -201,6 +206,21 @@ export function SystemSettings() {
       error("Failed to remove notification email");
     } finally {
       setRemovingNotificationEmail(null);
+    }
+  };
+
+  const handleTogglePref = async (key: keyof NotificationPreferences) => {
+    const updated = { ...notificationPreferences, [key]: !notificationPreferences[key] };
+    setNotificationPreferences(updated);
+    setSavingPrefs(true);
+    try {
+      const data = await api.systemSettings.updateNotificationPreferences(updated);
+      setNotificationPreferences(data.notificationPreferences);
+    } catch {
+      error("Failed to save preferences");
+      setNotificationPreferences(notificationPreferences); // revert on error
+    } finally {
+      setSavingPrefs(false);
     }
   };
 
@@ -433,6 +453,76 @@ export function SystemSettings() {
             </button>
           </form>
         </div>
+      </div>
+
+      {/* Notification Preferences Card */}
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6 flex flex-col lg:col-span-3">
+        <div className="mb-5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50">
+              <Bell className="h-5 w-5 text-blue-500" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-gray-900">Notification Events</h3>
+              <p className="text-sm text-gray-500">Choose which events send an email alert</p>
+            </div>
+          </div>
+          {savingPrefs && <Loader2 className="h-4 w-4 animate-spin text-slate-400" />}
+        </div>
+
+        <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 transition-opacity ${notificationsEnabled ? "" : "opacity-40 pointer-events-none"}`}>
+          {([
+            {
+              key: "onUpload" as const, label: "File Upload", desc: "When a file is uploaded", icon: Upload,
+              onBorder: "border-indigo-200", onBg: "bg-indigo-50", onIcon: "bg-indigo-100", onIconText: "text-indigo-600", onToggle: "bg-indigo-500",
+            },
+            {
+              key: "onDelete" as const, label: "File Deleted", desc: "When a file is deleted", icon: Trash,
+              onBorder: "border-red-200", onBg: "bg-red-50", onIcon: "bg-red-100", onIconText: "text-red-600", onToggle: "bg-red-500",
+            },
+            {
+              key: "onLogin" as const, label: "Admin Login", desc: "When someone logs in", icon: LogIn,
+              onBorder: "border-emerald-200", onBg: "bg-emerald-50", onIcon: "bg-emerald-100", onIconText: "text-emerald-600", onToggle: "bg-emerald-500",
+            },
+            {
+              key: "onDownload" as const, label: "File Download", desc: "When a file is downloaded", icon: Download,
+              onBorder: "border-amber-200", onBg: "bg-amber-50", onIcon: "bg-amber-100", onIconText: "text-amber-600", onToggle: "bg-amber-500",
+            },
+            {
+              key: "onShare" as const, label: "File Shared", desc: "When a share link is created", icon: Share2,
+              onBorder: "border-purple-200", onBg: "bg-purple-50", onIcon: "bg-purple-100", onIconText: "text-purple-600", onToggle: "bg-purple-500",
+            },
+          ]).map(({ key, label, desc, icon: Icon, onBorder, onBg, onIcon, onIconText, onToggle }) => {
+            const enabled = notificationPreferences[key];
+            return (
+              <button
+                key={key}
+                onClick={() => handleTogglePref(key)}
+                className={`relative flex flex-col gap-2 rounded-xl border-2 p-4 text-left transition-all ${
+                  enabled ? `${onBorder} ${onBg}` : "border-slate-200 bg-white hover:border-slate-300"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${enabled ? onIcon : "bg-slate-100"}`}>
+                    <Icon className={`h-4 w-4 ${enabled ? onIconText : "text-slate-400"}`} />
+                  </div>
+                  {/* Toggle pill */}
+                  <div className={`h-5 w-9 rounded-full transition-colors ${enabled ? onToggle : "bg-slate-200"}`}>
+                    <div className={`mt-0.5 ml-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${enabled ? "translate-x-4" : "translate-x-0"}`} />
+                  </div>
+                </div>
+                <div>
+                  <p className={`text-sm font-semibold ${enabled ? "text-gray-900" : "text-gray-400"}`}>{label}</p>
+                  <p className={`text-xs mt-0.5 ${enabled ? "text-gray-500" : "text-gray-300"}`}>{desc}</p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {!notificationsEnabled && (
+          <p className="mt-3 text-xs text-amber-600 font-medium">⚠️ Global notifications are disabled. Enable them above to activate these events.</p>
+        )}
       </div>
 
       {/* Server Controls Card */}

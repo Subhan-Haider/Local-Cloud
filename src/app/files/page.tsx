@@ -10,9 +10,9 @@ import { BulkShareModal } from "@/components/files/BulkShareModal";
 import { BulkActionsModal } from "@/components/files/BulkActionsModal";
 import { RenameModal } from "@/components/files/RenameModal";
 import { MoveModal } from "@/components/files/MoveModal";
-import { api, FileData } from "@/lib/api";
+import { api, FileData, FolderTreeNode } from "@/lib/api";
 import { useToast } from "@/components/ui/ToastProvider";
-import { LayoutGrid, List, Trash2, Filter, Download, Share2, MoreHorizontal } from "lucide-react";
+import { LayoutGrid, List, Trash2, Filter, Download, Share2, MoreHorizontal, FolderPlus, Check, X, Loader2 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 
 export default function FilesPage() {
@@ -21,6 +21,7 @@ export default function FilesPage() {
   const searchQuery = searchParams.get("q")?.toLowerCase() || "";
 
   const [files, setFiles] = useState<FileData[]>([]);
+  const [folderTree, setFolderTree] = useState<FolderTreeNode[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [activeFolder, setActiveFolder] = useState<string | null>(null);
@@ -35,13 +36,37 @@ export default function FilesPage() {
   const [renameFile, setRenameFile] = useState<FileData | null>(null);
   const [moveFile, setMoveFile] = useState<FileData | null>(null);
 
+  const [isCreatingSub, setIsCreatingSub] = useState(false);
+  const [subName, setSubName] = useState("");
+  const [creatingSubBusy, setCreatingSubBusy] = useState(false);
+
+  const handleCreateSubfolder = async () => {
+    if (!subName.trim() || !activeFolder) return;
+    setCreatingSubBusy(true);
+    try {
+      await api.createFolder(`${activeFolder}/${subName.trim()}`);
+      success(`Subfolder created`);
+      setSubName("");
+      setIsCreatingSub(false);
+      loadData();
+    } catch {
+      toastError("Failed to create subfolder");
+    } finally {
+      setCreatingSubBusy(false);
+    }
+  };
+
   const loadData = async () => {
     setLoading(true);
     try {
-      const filesData = await api.getFiles();
+      const [filesData, treeData] = await Promise.all([
+        api.getFiles(),
+        api.getFolderTree()
+      ]);
       setFiles(filesData);
+      setFolderTree(treeData);
     } catch (err) {
-      toastError("Failed to load files");
+      toastError("Failed to load data");
     } finally {
       setLoading(false);
     }
@@ -52,11 +77,40 @@ export default function FilesPage() {
   }, []);
 
   // Compute folders
-  const foldersMap = new Map<string, number>();
-  files.forEach(f => {
-    foldersMap.set(f.folder, (foldersMap.get(f.folder) || 0) + 1);
-  });
-  const foldersList = Array.from(foldersMap.entries()).map(([name, count]) => ({ name, count }));
+  const findNodeByPath = (nodes: FolderTreeNode[], path: string): FolderTreeNode | null => {
+    for (const node of nodes) {
+      if (node.path === path) return node;
+      const found = findNodeByPath(node.children, path);
+      if (found) return found;
+    }
+    return null;
+  };
+
+  let displayedNodes = folderTree;
+  if (activeFolder) {
+    const node = findNodeByPath(folderTree, activeFolder);
+    if (node) {
+      displayedNodes = node.children;
+    } else {
+      displayedNodes = [];
+    }
+  }
+
+  const foldersList = displayedNodes.map(node => ({
+    path: node.path,
+    name: node.name,
+    count: node.fileCount
+  }));
+
+  const getAllPaths = (nodes: FolderTreeNode[]): string[] => {
+    let paths: string[] = [];
+    for (const node of nodes) {
+      paths.push(node.path);
+      paths = paths.concat(getAllPaths(node.children));
+    }
+    return paths;
+  };
+  const allFolderPaths = getAllPaths(folderTree);
 
   // Filter files
   let filteredFiles = files;
@@ -196,6 +250,16 @@ export default function FilesPage() {
     }
   };
 
+  const handleCreateFolder = async (folderName: string) => {
+    try {
+      await api.createFolder(folderName);
+      success(`Folder "${folderName}" created`);
+      loadData();
+    } catch {
+      toastError(`Failed to create folder "${folderName}"`);
+    }
+  };
+
   return (
     <>
       <Topbar onRefresh={loadData} />
@@ -205,7 +269,7 @@ export default function FilesPage() {
           <p className="text-sm text-gray-500 dark:text-gray-400">Manage all your uploaded files.</p>
         </div>
 
-        <FolderView folders={foldersList} activeFolder={activeFolder} onSelectFolder={setActiveFolder} onDownloadFolder={handleDownloadFolder} onDeleteFolder={handleDeleteFolder} />
+        <FolderView folders={foldersList} activeFolder={activeFolder} onSelectFolder={setActiveFolder} onDownloadFolder={handleDownloadFolder} onDeleteFolder={handleDeleteFolder} onCreateFolder={handleCreateFolder} />
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           {/* Filters */}
@@ -264,6 +328,35 @@ export default function FilesPage() {
               </>
             )}
 
+            {activeFolder && (
+              isCreatingSub ? (
+                <div className="flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1 dark:border-indigo-800/40 dark:bg-indigo-950/20">
+                  <input
+                    autoFocus
+                    value={subName}
+                    onChange={e => setSubName(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") handleCreateSubfolder(); if (e.key === "Escape") { setIsCreatingSub(false); setSubName(""); } }}
+                    placeholder="Subfolder name..."
+                    className="w-32 bg-transparent text-sm font-medium text-indigo-900 outline-none placeholder:text-indigo-300 dark:text-indigo-100 dark:placeholder:text-indigo-700"
+                  />
+                  <button onClick={handleCreateSubfolder} disabled={creatingSubBusy || !subName.trim()} className="text-emerald-500 hover:text-emerald-700 disabled:opacity-50">
+                    {creatingSubBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                  </button>
+                  <button onClick={() => { setIsCreatingSub(false); setSubName(""); }} className="text-gray-400 hover:text-red-500">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setIsCreatingSub(true)}
+                  className="flex items-center gap-1.5 rounded-lg border border-dashed border-indigo-300 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-600 hover:bg-indigo-100 dark:border-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-400 dark:hover:bg-indigo-900/50 transition-colors"
+                >
+                  <FolderPlus className="h-4 w-4" />
+                  New Subfolder
+                </button>
+              )
+            )}
+
             <button
               onClick={handleSelectAll}
               className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-slate-700 transition-colors"
@@ -314,13 +407,13 @@ export default function FilesPage() {
       {showBulkActions && (
         <BulkActionsModal
           files={filteredFiles.filter(f => selectedFiles.includes(`${f.folder}/${f.name}`))}
-          folders={Array.from(foldersMap.keys())}
+          folders={allFolderPaths}
           onClose={() => setShowBulkActions(false)}
           onSuccess={() => { setSelectedFiles([]); loadData(); }}
         />
       )}
       <RenameModal file={renameFile} onClose={() => setRenameFile(null)} onSuccess={loadData} />
-      <MoveModal file={moveFile} folders={Array.from(foldersMap.keys())} onClose={() => setMoveFile(null)} onSuccess={loadData} />
+      <MoveModal file={moveFile} folders={allFolderPaths} onClose={() => setMoveFile(null)} onSuccess={loadData} />
     </>
   );
 }

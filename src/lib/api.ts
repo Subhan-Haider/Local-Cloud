@@ -82,12 +82,29 @@ export interface AdminUser {
 // API METHODS
 // ==============================
 
+export interface NotificationPreferences {
+  onUpload: boolean;
+  onDelete: boolean;
+  onLogin: boolean;
+  onDownload: boolean;
+  onShare: boolean;
+}
+
+export interface FolderTreeNode {
+  name: string;
+  path: string;
+  fileCount: number;
+  sizeBytes: number;
+  children: FolderTreeNode[];
+}
+
 export interface SystemSettingsData {
   allowedOrigins: string[];
   allowedEmails: string[];
   notificationEmails: string[];
   notificationsEnabled: boolean;
   customBaseUrl?: string;
+  notificationPreferences?: NotificationPreferences;
 }
 export const api = {
   // Files
@@ -145,6 +162,11 @@ export const api = {
   // Folder ops
   createFolder: async (folder: string): Promise<void> => {
     await apiInstance.post("/create-folder", { folder });
+  },
+
+  getFolderTree: async (): Promise<FolderTreeNode[]> => {
+    const { data } = await apiInstance.get("/admin/folder-tree");
+    return data;
   },
 
   // File ops
@@ -403,7 +425,11 @@ export const api = {
     setCustomBaseUrl: async (customBaseUrl: string): Promise<{ success: boolean; customBaseUrl: string }> => {
       const { data } = await apiInstance.post("/admin/settings/base-url", { customBaseUrl });
       return data;
-    }
+    },
+    updateNotificationPreferences: async (preferences: Partial<NotificationPreferences>): Promise<{ success: boolean; notificationPreferences: NotificationPreferences }> => {
+      const { data } = await apiInstance.post("/admin/settings/notifications/preferences", { preferences });
+      return data;
+    },
   },
 
   // ── 2FA / MFA ──────────────────────────────────────────────────────────────

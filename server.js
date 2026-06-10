@@ -63,11 +63,15 @@ if (process.env.SMTP_ENABLED === "true") {
   });
 }
 
-function sendSystemAlertEmail(title, message, emoji = "🔔") {
+function sendSystemAlertEmail(title, message, emoji = "🔔", eventType = null) {
   if (!transporter) return;
   const db = readDb();
   const settings = db.settings || {};
   if (settings.notificationsEnabled === false) return;
+  // Per-event check
+  if (eventType && settings.notificationPreferences) {
+    if (settings.notificationPreferences[eventType] === false) return;
+  }
 
   const emails = settings.notificationEmails || [process.env.ADMIN_EMAIL].filter(Boolean);
   if (emails.length === 0) return;
@@ -103,6 +107,7 @@ function sendUploadNotificationEmail(filename, folderName, fileSize) {
   const db = readDb();
   const settings = db.settings || {};
   if (settings.notificationsEnabled === false) return; // Globally disabled
+  if (settings.notificationPreferences?.onUpload === false) return; // Per-event disabled
 
   const emails = settings.notificationEmails || [process.env.ADMIN_EMAIL].filter(Boolean);
   if (emails.length === 0) return;
@@ -222,6 +227,13 @@ function readDb() {
     if (!data.settings.notificationEmails) data.settings.notificationEmails = ["support@subhan.tech"];
     if (data.settings.notificationsEnabled === undefined) data.settings.notificationsEnabled = true;
     if (data.settings.customBaseUrl === undefined) data.settings.customBaseUrl = "";
+    if (!data.settings.notificationPreferences) data.settings.notificationPreferences = {
+      onUpload: true,
+      onDelete: true,
+      onLogin: true,
+      onDownload: false,
+      onShare: true,
+    };
     return data;
   } catch (e) {
     return defaultDb;
@@ -587,7 +599,7 @@ const getAllFiles = (dirPath, db, arrayOfFiles = []) => {
 // =====================
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const folderName = req.body.folder ? req.body.folder.replace(/[^a-zA-Z0-9.\-_]/g, "") : "";
+    const folderName = req.body.folder ? req.body.folder.replace(/[^a-zA-Z0-9.\-_/]/g, "") : "";
     const targetDir = (!folderName || folderName === "root") ? UPLOAD_PATH : path.join(UPLOAD_PATH, folderName);
     if (!fs.existsSync(targetDir)) {
       fs.mkdirSync(targetDir, { recursive: true });
@@ -1164,7 +1176,7 @@ app.post("/upload", apiLimiter, requireUploadAuth, (req, res) => {
     if (!req.file) return res.status(400).json({ error: "No file provided" });
 
     let finalFilename = req.file.filename;
-    let folderName = req.body.folder ? req.body.folder.replace(/[^a-zA-Z0-9.\-_]/g, "") : "root";
+    let folderName = req.body.folder ? req.body.folder.replace(/[^a-zA-Z0-9.\-_/]/g, "") : "root";
     let isImage = req.file.mimetype.startsWith("image/");
     let isVideo = req.file.mimetype.startsWith("video/");
     let hasThumb = false;
@@ -1416,6 +1428,56 @@ app.post("/move-file", requireAuth, (req, res) => {
     res.json({ success: true, message: "File moved successfully" });
   } else {
     res.status(404).json({ error: "Source file not found" });
+  }
+});
+
+// 7.5 MOVE FOLDER
+app.post("/admin/move-folder", requireAuth, (req, res) => {
+  const { sourceFolder, destinationFolder } = req.body;
+  if (!sourceFolder || destinationFolder === undefined) return res.status(400).json({ error: "Missing parameters" });
+  if (sourceFolder === destinationFolder || sourceFolder === "root") return res.status(400).json({ error: "Invalid move" });
+
+  const srcPath = path.join(UPLOAD_PATH, sourceFolder);
+  const destName = path.basename(sourceFolder);
+  const destPath = destinationFolder === "root" || !destinationFolder
+    ? path.join(UPLOAD_PATH, destName)
+    : path.join(UPLOAD_PATH, destinationFolder, destName);
+
+  if (!srcPath.startsWith(UPLOAD_PATH) || !destPath.startsWith(UPLOAD_PATH)) {
+    return res.status(403).json({ error: "Invalid path" });
+  }
+
+  if (fs.existsSync(destPath)) {
+    return res.status(400).json({ error: "Destination folder already exists" });
+  }
+
+  if (fs.existsSync(srcPath)) {
+    fs.mkdirSync(path.dirname(destPath), { recursive: true });
+    fs.renameSync(srcPath, destPath);
+
+    const db = readDb();
+    const oldPrefix = `${sourceFolder}/`;
+    const newPrefix = destinationFolder === "root" || !destinationFolder ? `${destName}/` : `${destinationFolder}/${destName}/`;
+
+    const newFiles = {};
+    for (const key in db.files) {
+      if (key.startsWith(oldPrefix)) {
+        const rest = key.substring(oldPrefix.length);
+        newFiles[`${newPrefix}${rest}`] = {
+          ...db.files[key],
+          folder: destinationFolder === "root" || !destinationFolder ? destName : `${destinationFolder}/${destName}`
+        };
+      } else {
+        newFiles[key] = db.files[key];
+      }
+    }
+    db.files = newFiles;
+    writeDb(db);
+
+    logEvent("FOLDER_MOVE", { sourceFolder, destinationFolder });
+    res.json({ success: true, message: "Folder moved successfully" });
+  } else {
+    res.status(404).json({ error: "Source folder not found" });
   }
 });
 
@@ -3196,6 +3258,22 @@ app.delete("/admin/settings/notifications/emails", requireAuth, (req, res) => {
     logEvent("NOTIFICATION_EMAIL_REMOVED", { email: email.toLowerCase().trim() });
   }
   res.json({ success: true, notificationEmails: db.settings?.notificationEmails || [] });
+});
+
+app.post("/admin/settings/notifications/preferences", requireAuth, (req, res) => {
+  const { preferences } = req.body;
+  if (!preferences || typeof preferences !== 'object') {
+    return res.status(400).json({ error: "Invalid preferences object" });
+  }
+  const db = readDb();
+  if (!db.settings) db.settings = {};
+  db.settings.notificationPreferences = {
+    ...db.settings.notificationPreferences,
+    ...preferences,
+  };
+  writeDb(db);
+  logEvent("NOTIFICATION_PREFERENCES_UPDATED", { preferences });
+  res.json({ success: true, notificationPreferences: db.settings.notificationPreferences });
 });
 
 

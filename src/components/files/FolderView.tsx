@@ -1,13 +1,15 @@
 "use client";
 
-import { Folder, X, Download, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { Folder, X, Download, Trash2, Plus, Check } from "lucide-react";
 
 interface FolderViewProps {
-  folders: { name: string; count: number }[];
+  folders: { path: string; name: string; count: number }[];
   activeFolder: string | null;
   onSelectFolder: (folder: string | null) => void;
   onDownloadFolder?: (folder: string) => void;
   onDeleteFolder?: (folder: string) => void;
+  onCreateFolder?: (folder: string) => Promise<void>;
 }
 
 const FOLDER_COLORS = [
@@ -28,7 +30,16 @@ const FOLDER_ICON_COLORS = [
   "text-indigo-500",
 ];
 
-export function FolderView({ folders, activeFolder, onSelectFolder, onDownloadFolder, onDeleteFolder }: FolderViewProps) {
+export function FolderView({ folders, activeFolder, onSelectFolder, onDownloadFolder, onDeleteFolder, onCreateFolder }: FolderViewProps) {
+  const [isCreating, setIsCreating] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+
+  const handleCreate = async () => {
+    if (!newFolderName.trim() || !onCreateFolder) return;
+    await onCreateFolder(newFolderName.trim());
+    setIsCreating(false);
+    setNewFolderName("");
+  };
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
@@ -46,14 +57,47 @@ export function FolderView({ folders, activeFolder, onSelectFolder, onDownloadFo
         )}
       </div>
       <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+        {/* Create Folder Button/Input */}
+        {onCreateFolder && (
+          isCreating ? (
+            <div className="flex shrink-0 items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-3 dark:border-indigo-800/40 dark:bg-indigo-950/20">
+              <Folder className="h-5 w-5 shrink-0 text-indigo-400" />
+              <input
+                autoFocus
+                value={newFolderName}
+                onChange={e => setNewFolderName(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") handleCreate(); if (e.key === "Escape") { setIsCreating(false); setNewFolderName(""); } }}
+                placeholder="Folder name..."
+                className="w-32 bg-transparent text-sm font-semibold text-indigo-900 outline-none placeholder:text-indigo-300 dark:text-indigo-100 dark:placeholder:text-indigo-700"
+              />
+              <button onClick={handleCreate} disabled={!newFolderName.trim()} className="text-emerald-500 hover:text-emerald-700 disabled:opacity-50">
+                <Check className="h-4 w-4" />
+              </button>
+              <button onClick={() => { setIsCreating(false); setNewFolderName(""); }} className="text-gray-400 hover:text-red-500">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setIsCreating(true)}
+              className="group flex shrink-0 items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 hover:border-indigo-400 hover:bg-indigo-50 dark:border-slate-700 dark:bg-slate-800/50 dark:hover:border-indigo-600 dark:hover:bg-indigo-950/30 transition-all"
+            >
+              <Plus className="h-5 w-5 text-slate-400 group-hover:text-indigo-500 transition-colors" />
+              <span className="text-sm font-semibold text-slate-500 group-hover:text-indigo-600 dark:text-slate-400 dark:group-hover:text-indigo-400">
+                New Folder
+              </span>
+            </button>
+          )
+        )}
+
         {folders.map((folder, i) => {
           const colorClass = FOLDER_COLORS[i % FOLDER_COLORS.length];
           const iconColor = FOLDER_ICON_COLORS[i % FOLDER_ICON_COLORS.length];
-          const isActive = activeFolder === folder.name;
+          const isActive = activeFolder === folder.path;
           return (
             <button
-              key={folder.name}
-              onClick={() => onSelectFolder(isActive ? null : folder.name)}
+              key={folder.path}
+              onClick={() => onSelectFolder(isActive ? null : folder.path)}
               className={`group flex shrink-0 items-center gap-3 rounded-xl border px-4 py-3 transition-all ${
                 isActive
                   ? "border-indigo-500 bg-indigo-50 dark:border-indigo-500/60 dark:bg-indigo-950/40 shadow-sm shadow-indigo-100 dark:shadow-indigo-900/20"
@@ -76,7 +120,7 @@ export function FolderView({ folders, activeFolder, onSelectFolder, onDownloadFo
                   className="ml-1 hidden p-1.5 rounded-md hover:bg-black/5 dark:hover:bg-white/10 transition-colors group-hover:block"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onDownloadFolder(folder.name);
+                    onDownloadFolder(folder.path);
                   }}
                   title="Download Folder"
                 >
@@ -90,7 +134,7 @@ export function FolderView({ folders, activeFolder, onSelectFolder, onDownloadFo
                   className="ml-1 hidden p-1.5 rounded-md hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors group-hover:block"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onDeleteFolder(folder.name);
+                    onDeleteFolder(folder.path);
                   }}
                   title="Delete Folder"
                 >
