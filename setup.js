@@ -542,6 +542,19 @@ ADMIN_EMAIL=${adminEmail}
     print("");
   }
 
+  try {
+    const hostname = new URL(baseUrl).hostname;
+    const isIP = /^[0-9.]+$/.test(hostname);
+    if (!isIP && hostname !== "localhost") {
+      print(`  ${c.bold}🌐 DNS Configuration Required${c.reset}`);
+      print(`  To make your domain work, add this record in your DNS provider (e.g. Cloudflare, GoDaddy):`);
+      print(`  • Type:  ${c.cyan}A${c.reset}`);
+      print(`  • Name:  ${c.cyan}${hostname}${c.reset} (or @)`);
+      print(`  • Value: ${c.cyan}${localIp}${c.reset} (Replace with your server's public IP if different)`);
+      print("");
+    }
+  } catch (e) {}
+
   print(`  ${c.cyan}What would you like to do now?${c.reset}`);
   print(`  1) Start locally    (runs 'npm install' then 'npm run dev')`);
   print(`  2) Start via Docker (runs 'docker compose up -d')`);
