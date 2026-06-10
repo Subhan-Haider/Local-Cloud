@@ -57,7 +57,7 @@ export default function TermsPage() {
             },
             {
               title: "11. Contact",
-              body: `If you have any questions about these Terms & Conditions, please contact: support@subhan.tech`
+              body: `If you have any questions about these Terms & Conditions, please contact the server administrator.`
             },
           ].map((section) => (
             <div key={section.title} className="px-8 py-6">

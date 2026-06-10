@@ -321,7 +321,7 @@ export function AuthGate({ children }: AuthGateProps) {
 
           <div className="mt-6 flex items-center justify-center gap-2">
             <HardDrive className="h-3.5 w-3.5 text-slate-400" />
-            <p className="text-xs text-slate-400">storage.lootops.me — Personal Storage Admin</p>
+            <p className="text-xs text-slate-400">LootOps Cloud — Self-hosted Storage</p>
           </div>
         </div>
       </div>
@@ -482,7 +482,7 @@ export function AuthGate({ children }: AuthGateProps) {
         <div className="mt-6 flex flex-col items-center gap-2">
           <div className="flex items-center justify-center gap-2">
             <HardDrive className="h-3.5 w-3.5 text-slate-400" />
-            <p className="text-xs text-slate-400">storage.lootops.me — Personal Storage Admin</p>
+            <p className="text-xs text-slate-400">LootOps Cloud — Self-hosted Storage</p>
           </div>
           <div className="flex items-center gap-3">
             <a href="/privacy" target="_blank" className="text-xs text-slate-400 hover:text-indigo-600 transition-colors">Privacy Policy</a>

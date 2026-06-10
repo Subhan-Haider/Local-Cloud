@@ -49,7 +49,7 @@ export default function PrivacyPage() {
             },
             {
               title: "9. Contact",
-              body: `If you have any questions or concerns about this privacy policy, please contact the administrator at: support@subhan.tech`
+              body: `If you have any questions or concerns about this privacy policy, please contact the server administrator.`
             },
           ].map((section) => (
             <div key={section.title} className="px-8 py-6">
