@@ -700,11 +700,28 @@ WantedBy=multi-user.target
     console.log(`  Manage with: sudo systemctl status local-cloud`);
   } else if (startChoice === "6" && isCustomDomain) {
     console.log(`\n  ⚙️  Automatically configuring Nginx & SSL...`);
-    console.log(`  [1/4] Installing nginx and certbot...`);
+    console.log(`  [1/5] Installing nginx and certbot...`);
     spawnSync("sudo", ["apt", "update"], { stdio: "inherit" });
     spawnSync("sudo", ["apt", "install", "-y", "nginx", "certbot", "python3-certbot-nginx"], { stdio: "inherit" });
-    
-    console.log(`\n  [2/4] Generating Nginx configuration for ${hostname}...`);
+
+    console.log(`\n  [2/5] Clearing port 80 conflicts...`);
+    const port80check = spawnSync("sudo", ["ss", "-tlnp"], { encoding: "utf8" });
+    const port80out = (port80check.stdout || "") + (port80check.stderr || "");
+    if (port80out.includes("apache2")) {
+      console.log(`  → Apache2 detected on port 80. Stopping and disabling apache2...`);
+      spawnSync("sudo", ["systemctl", "stop", "apache2"], { stdio: "inherit" });
+      spawnSync("sudo", ["systemctl", "disable", "apache2"], { stdio: "inherit" });
+    } else if (port80out.includes(":80") && port80out.includes("nginx")) {
+      console.log(`  → Old Nginx process detected. Stopping it...`);
+      spawnSync("sudo", ["systemctl", "stop", "nginx"], { stdio: "inherit" });
+    } else if (port80out.includes(":80")) {
+      console.log(`  → Unknown process on port 80. Force-killing it...`);
+      spawnSync("sudo", ["fuser", "-k", "80/tcp"], { stdio: "inherit" });
+    } else {
+      console.log(`  → Port 80 is free. Continuing...`);
+    }
+
+    console.log(`\n  [3/5] Generating Nginx configuration for ${hostname}...`);
     const nginxConfig = `server {
     listen 80;
     server_name ${hostname};
@@ -720,14 +737,17 @@ WantedBy=multi-user.target
     const tmpPath = path.join(os.tmpdir(), `nginx-${hostname}`);
     fs.writeFileSync(tmpPath, nginxConfig);
     spawnSync("sudo", ["mv", tmpPath, `/etc/nginx/sites-available/${hostname}`], { stdio: "inherit" });
-    
-    console.log(`\n  [3/4] Enabling site...`);
+    spawnSync("sudo", ["rm", "-f", "/etc/nginx/sites-enabled/default"], { stdio: "inherit" });
+
+    console.log(`\n  [4/5] Starting Nginx and enabling site...`);
     spawnSync("sudo", ["ln", "-sf", `/etc/nginx/sites-available/${hostname}`, `/etc/nginx/sites-enabled/`], { stdio: "inherit" });
-    spawnSync("sudo", ["systemctl", "reload", "nginx"], { stdio: "inherit" });
-    
-    console.log(`\n  [4/4] Requesting SSL Certificate from Let's Encrypt...`);
-    spawnSync("sudo", ["certbot", "--nginx", "-d", hostname], { stdio: "inherit" });
-    
+    spawnSync("sudo", ["nginx", "-t"], { stdio: "inherit" });
+    spawnSync("sudo", ["systemctl", "start", "nginx"], { stdio: "inherit" });
+    spawnSync("sudo", ["systemctl", "enable", "nginx"], { stdio: "inherit" });
+
+    console.log(`\n  [5/5] Requesting SSL Certificate from Let's Encrypt...`);
+    spawnSync("sudo", ["certbot", "--nginx", "-d", hostname, "--non-interactive", "--agree-tos", "--register-unsafely-without-email"], { stdio: "inherit" });
+
     console.log(`\n  ✅ Nginx and SSL setup complete!`);
     console.log(`  Visit your site at: https://${hostname}`);
     console.log(`\n  To start the actual server now, run:`);
