@@ -504,6 +504,7 @@ async function main() {
 
 # ── Server ──────────────────────────────────────────────────────────
 PORT=${expressPort}
+NEXTJS_PORT=${nextPort}
 UPLOAD_PATH=${uploadPath}
 
 # Public base URL of the Express API server
