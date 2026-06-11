@@ -605,7 +605,7 @@ ADMIN_EMAIL=${adminEmail}
 
   print(`  ${c.cyan}What would you like to do now?${c.reset}`);
   print(`  1) Start locally    (runs 'npm install' then 'npm run dev')`);
-  print(`  2) Start via Docker (runs 'docker compose up -d')`);
+  print(`  2) Start via Docker (runs 'docker compose --env-file .env.local up -d')`);
   print(`  3) Exit`);
   print("");
 
@@ -619,10 +619,10 @@ ADMIN_EMAIL=${adminEmail}
     spawnSync(/^win/.test(process.platform) ? 'npm.cmd' : 'npm', ["run", "dev"], { stdio: "inherit" });
   } else if (startChoice === "2") {
     console.log(`\n  🐳 Starting Docker container...`);
-    spawnSync("docker", ["compose", "up", "-d"], { stdio: "inherit" });
+    spawnSync("docker", ["compose", "--env-file", ".env.local", "up", "-d"], { stdio: "inherit" });
     console.log(`\n  ✅ Docker started!`);
     console.log(`  Dashboard: ${baseUrl}:${nextPort}`);
-    console.log(`  Logs:      docker compose logs -f`);
+    console.log(`  Logs:      docker compose --env-file .env.local logs -f`);
   } else {
     console.log("\n  Bye!");
   }
