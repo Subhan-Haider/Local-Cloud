@@ -258,15 +258,29 @@ async function main() {
   info("  • Subdomain:        https://storage.yourdomain.com");
   print("");
 
-  const domain = await ask("Your server domain or IP", `http://${localIp}`);
+  print("  1) drive.[your-domain]    (e.g. drive.subhan.tech)");
+  print("  2) storage.[your-domain]  (e.g. storage.subhan.tech)");
+  print("  3) Custom URL / IP        (e.g. http://localhost)");
+  print("");
+  const domainType = await ask("Choose domain type (1/2/3)", "1");
+  
+  let baseUrl = "";
 
-  // Normalize: strip trailing slash and ensure protocol
-  let baseUrl = domain.replace(/\/$/, "");
-  if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) {
-    // Auto-detect if it's a local IP/localhost vs a real domain
-    baseUrl = baseUrl.includes("localhost") || baseUrl.match(/^[0-9.]+$/)
-      ? `http://${baseUrl}`
-      : `https://${baseUrl}`;
+  if (domainType === "1" || domainType === "2") {
+    const rootDomain = await ask("Enter your root domain (e.g. subhan.tech)");
+    const prefix = domainType === "1" ? "drive" : "storage";
+    baseUrl = `https://${prefix}.${rootDomain}`;
+  } else {
+    const customDomain = await ask("Enter your custom URL or IP", `http://${localIp}`);
+    
+    // Normalize: strip trailing slash and ensure protocol
+    baseUrl = customDomain.replace(/\/$/, "");
+    if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) {
+      // Auto-detect if it's a local IP/localhost vs a real domain
+      baseUrl = baseUrl.includes("localhost") || baseUrl.match(/^[0-9.]+$/)
+        ? `http://${baseUrl}`
+        : `https://${baseUrl}`;
+    }
   }
 
   // Ports
