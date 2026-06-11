@@ -430,37 +430,37 @@ async function main() {
   info("Skip this step if you don't want email notifications.");
   print("");
 
-  const smtpEnabled = await ask("Enable email notifications? (yes/no)", "no");
+  print("  1) Skip (No email notifications)");
+  print("  2) Gmail (Requires App Password)");
+  print("  3) Outlook / Office 365");
+  print("  4) Yahoo Mail (Requires App Password)");
+  print("  5) Custom SMTP");
+  print("");
+  const providerChoice = await ask("Choose email provider (1-5)", "1");
+
   let smtpHost = "", smtpPort = "587", smtpSecure = "false";
   let smtpUser = "", smtpPass = "", smtpFrom = "", adminEmail = "";
+  let smtpEnabled = providerChoice !== "1" ? "true" : "false";
 
-  if (smtpEnabled.toLowerCase().startsWith("y")) {
-    print("");
-    print("  1) Gmail (Requires App Password)");
-    print("  2) Outlook / Office 365");
-    print("  3) Yahoo Mail (Requires App Password)");
-    print("  4) Custom SMTP");
-    print("");
-    const providerChoice = await ask("Choose email provider (1/2/3/4)", "1");
-
-    if (providerChoice === "1") {
+  if (smtpEnabled === "true") {
+    if (providerChoice === "2") {
       smtpHost = "smtp.gmail.com";
       smtpPort = "587";
       info("  Note: You MUST use an App Password, not your real Gmail password.");
       info("  (Google Account → Security → 2-Step Verification → App Passwords)");
-    } else if (providerChoice === "2") {
+    } else if (providerChoice === "3") {
       smtpHost = "smtp-mail.outlook.com";
       smtpPort = "587";
-    } else if (providerChoice === "3") {
+    } else if (providerChoice === "4") {
       smtpHost = "smtp.mail.yahoo.com";
       smtpPort = "587";
       info("  Note: You MUST use an App Password, not your real Yahoo password.");
-    } else {
+    } else if (providerChoice === "5") {
       smtpHost = await ask("SMTP Host   ", "smtp.example.com");
       smtpPort = await ask("SMTP Port   ", "587");
     }
 
-    if (providerChoice === "4") {
+    if (providerChoice === "5") {
       smtpSecure = await ask("SMTP Secure (true for port 465)", smtpPort === "465" ? "true" : "false");
     } else {
       smtpSecure = "false"; // 587 uses STARTTLS, which implies secure: false in Nodemailer
