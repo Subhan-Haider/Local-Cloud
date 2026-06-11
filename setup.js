@@ -618,13 +618,29 @@ ADMIN_EMAIL=${adminEmail}
     }
   } catch (e) {}
 
+  let isCustomDomain = false;
+  let hostname = "";
+  try {
+    hostname = new URL(baseUrl).hostname;
+    const isIP = /^[0-9.]+$/.test(hostname);
+    if (!isIP && hostname !== "localhost") {
+      isCustomDomain = true;
+    }
+  } catch(e) {}
+
   print(`  ${c.cyan}What would you like to do now?${c.reset}`);
   print(`  1) Start locally    (runs 'npm install' then 'npm run dev')`);
   print(`  2) Start via Docker (runs 'docker compose --env-file .env.local up -d')`);
-  print(`  3) Exit`);
+  if (isCustomDomain) {
+    print(`  3) Auto-Configure Nginx & SSL (Requires sudo)`);
+    print(`  4) Exit`);
+  } else {
+    print(`  3) Exit`);
+  }
   print("");
 
-  const startChoice = await ask("Choose option (1/2/3)", "1");
+  const maxOpt = isCustomDomain ? "4" : "3";
+  const startChoice = await ask(`Choose option (1-${maxOpt})`, "1");
   rl.close();
 
   if (startChoice === "1") {
@@ -638,6 +654,40 @@ ADMIN_EMAIL=${adminEmail}
     console.log(`\n  ✅ Docker started!`);
     console.log(`  Dashboard: ${baseUrl}:${nextPort}`);
     console.log(`  Logs:      docker compose --env-file .env.local logs -f`);
+  } else if (startChoice === "3" && isCustomDomain) {
+    console.log(`\n  ⚙️  Automatically configuring Nginx & SSL...`);
+    console.log(`  [1/4] Installing nginx and certbot...`);
+    spawnSync("sudo", ["apt", "update"], { stdio: "inherit" });
+    spawnSync("sudo", ["apt", "install", "-y", "nginx", "certbot", "python3-certbot-nginx"], { stdio: "inherit" });
+    
+    console.log(`\n  [2/4] Generating Nginx configuration for ${hostname}...`);
+    const nginxConfig = `server {
+    listen 80;
+    server_name ${hostname};
+    location / {
+        proxy_pass http://localhost:${nextPort};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
+}`;
+    const tmpPath = path.join(os.tmpdir(), `nginx-${hostname}`);
+    fs.writeFileSync(tmpPath, nginxConfig);
+    spawnSync("sudo", ["mv", tmpPath, `/etc/nginx/sites-available/${hostname}`], { stdio: "inherit" });
+    
+    console.log(`\n  [3/4] Enabling site...`);
+    spawnSync("sudo", ["ln", "-sf", `/etc/nginx/sites-available/${hostname}`, `/etc/nginx/sites-enabled/`], { stdio: "inherit" });
+    spawnSync("sudo", ["systemctl", "reload", "nginx"], { stdio: "inherit" });
+    
+    console.log(`\n  [4/4] Requesting SSL Certificate from Let's Encrypt...`);
+    spawnSync("sudo", ["certbot", "--nginx", "-d", hostname], { stdio: "inherit" });
+    
+    console.log(`\n  ✅ Nginx and SSL setup complete!`);
+    console.log(`  You can now access your site securely at: https://${hostname}`);
+    console.log(`\n  To start the actual server now, run:`);
+    console.log(`  docker compose --env-file .env.local up -d`);
   } else {
     console.log("\n  Bye!");
   }
