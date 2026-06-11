@@ -629,17 +629,19 @@ ADMIN_EMAIL=${adminEmail}
   } catch(e) {}
 
   print(`  ${c.cyan}What would you like to do now?${c.reset}`);
-  print(`  1) Start locally    (runs 'npm install' then 'npm run dev')`);
-  print(`  2) Start via Docker (runs 'docker compose --env-file .env.local up -d')`);
+  print(`  1) Start server locally (Development)`);
+  print(`  2) Start server via Docker (Production)`);
+  print(`  3) Stop Docker container`);
+  print(`  4) View Docker logs`);
   if (isCustomDomain) {
-    print(`  3) Auto-Configure Nginx & SSL (Requires sudo)`);
-    print(`  4) Exit`);
+    print(`  5) Auto-Configure Nginx & SSL (Requires sudo)`);
+    print(`  6) Exit`);
   } else {
-    print(`  3) Exit`);
+    print(`  5) Exit`);
   }
   print("");
 
-  const maxOpt = isCustomDomain ? "4" : "3";
+  const maxOpt = isCustomDomain ? "6" : "5";
   const startChoice = await ask(`Choose option (1-${maxOpt})`, "1");
   rl.close();
 
@@ -654,7 +656,14 @@ ADMIN_EMAIL=${adminEmail}
     console.log(`\n  ✅ Docker started!`);
     console.log(`  Dashboard: ${baseUrl}:${nextPort}`);
     console.log(`  Logs:      docker compose --env-file .env.local logs -f`);
-  } else if (startChoice === "3" && isCustomDomain) {
+  } else if (startChoice === "3") {
+    console.log(`\n  🛑 Stopping Docker container...`);
+    spawnSync("docker", ["compose", "down"], { stdio: "inherit" });
+    console.log(`\n  ✅ Docker stopped.`);
+  } else if (startChoice === "4") {
+    console.log(`\n  📄 Viewing Docker logs (Press Ctrl+C to exit)...`);
+    spawnSync("docker", ["compose", "--env-file", ".env.local", "logs", "-f"], { stdio: "inherit" });
+  } else if (startChoice === "5" && isCustomDomain) {
     console.log(`\n  ⚙️  Automatically configuring Nginx & SSL...`);
     console.log(`  [1/4] Installing nginx and certbot...`);
     spawnSync("sudo", ["apt", "update"], { stdio: "inherit" });
