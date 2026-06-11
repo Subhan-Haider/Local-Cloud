@@ -78,6 +78,7 @@ function askAdminSdk() {
     process.stdout.write(`  > `);
 
     let buffer = "";
+    let timeoutId = null;
 
     const onLine = (line) => {
       line = line.trim();
@@ -108,8 +109,13 @@ function askAdminSdk() {
       
       try {
         const parsed = JSON.parse(buffer);
-        rl.removeListener("line", onLine);
-        return resolve({ method: "parsed", data: parsed });
+        // Valid JSON found! Wait 100ms to consume any remaining trailing empty lines from paste
+        if (!timeoutId) {
+          timeoutId = setTimeout(() => {
+            rl.removeListener("line", onLine);
+            resolve({ method: "parsed", data: parsed });
+          }, 100);
+        }
       } catch (e) {
         // Not valid JSON yet, wait for more lines
       }
@@ -151,6 +157,7 @@ function askClientConfig() {
     process.stdout.write(`  > `);
 
     let buffer = "";
+    let timeoutId = null;
 
     const onLine = (line) => {
       line = line.trim();
@@ -171,18 +178,23 @@ function askClientConfig() {
         const appId = buffer.match(/appId:\s*['"]([^'"]+)['"]/);
 
         if (apiKey && authDomain && projectId) {
-          rl.removeListener("line", onLine);
-          return resolve({
-            method: "parsed",
-            data: {
-              apiKey: apiKey[1],
-              authDomain: authDomain[1],
-              projectId: projectId[1],
-              storageBucket: storageBucket ? storageBucket[1] : "",
-              messagingSenderId: messagingSenderId ? messagingSenderId[1] : "",
-              appId: appId ? appId[1] : ""
-            }
-          });
+          // Values found! Wait 100ms to consume any remaining trailing lines (like getAnalytics) from paste
+          if (!timeoutId) {
+            timeoutId = setTimeout(() => {
+              rl.removeListener("line", onLine);
+              resolve({
+                method: "parsed",
+                data: {
+                  apiKey: apiKey[1],
+                  authDomain: authDomain[1],
+                  projectId: projectId[1],
+                  storageBucket: storageBucket ? storageBucket[1] : "",
+                  messagingSenderId: messagingSenderId ? messagingSenderId[1] : "",
+                  appId: appId ? appId[1] : ""
+                }
+              });
+            }, 100);
+          }
         }
       }
     };
