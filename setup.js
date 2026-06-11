@@ -267,9 +267,15 @@ async function main() {
   let baseUrl = "";
 
   if (domainType === "1" || domainType === "2") {
-    const rootDomain = await ask("Enter your root domain (e.g. subhan.tech)");
+    let rootDomain = "";
+    while (!rootDomain || rootDomain.trim().length < 3 || !rootDomain.includes(".")) {
+      rootDomain = await ask("Enter your root domain (e.g. subhan.tech)");
+      if (!rootDomain || rootDomain.trim().length < 3 || !rootDomain.includes(".")) {
+        warn("Please enter a valid domain (e.g. subhan.tech)");
+      }
+    }
     const prefix = domainType === "1" ? "drive" : "storage";
-    baseUrl = `https://${prefix}.${rootDomain}`;
+    baseUrl = `https://${prefix}.${rootDomain.trim().toLowerCase()}`;
   } else {
     const customDomain = await ask("Enter your custom URL or IP", `http://${localIp}`);
     
@@ -633,16 +639,17 @@ ADMIN_EMAIL=${adminEmail}
   print(`  2) Start server via Docker (Production)`);
   print(`  3) Stop Docker container`);
   print(`  4) View Docker logs`);
+  print(`  5) Enable auto-start on boot (systemd)`);
   if (isCustomDomain) {
-    print(`  5) Auto-Configure Nginx & SSL (Requires sudo)`);
-    print(`  6) Exit`);
+    print(`  6) Auto-Configure Nginx & SSL (Requires sudo)`);
+    print(`  7) Exit`);
   } else {
-    print(`  5) Exit`);
+    print(`  6) Exit`);
   }
   print("");
 
-  const maxOpt = isCustomDomain ? "6" : "5";
-  const startChoice = await ask(`Choose option (1-${maxOpt})`, "1");
+  const maxOpt = isCustomDomain ? "7" : "6";
+  const startChoice = await ask(`Choose option (1-${maxOpt})`, "2");
   rl.close();
 
   if (startChoice === "1") {
@@ -653,8 +660,8 @@ ADMIN_EMAIL=${adminEmail}
   } else if (startChoice === "2") {
     console.log(`\n  🐳 Starting Docker container...`);
     spawnSync("docker", ["compose", "--env-file", ".env.local", "up", "-d"], { stdio: "inherit" });
-    console.log(`\n  ✅ Docker started!`);
-    console.log(`  Dashboard: ${baseUrl}:${nextPort}`);
+    console.log(`\n  ✅ Docker started! (Container is set to auto-restart on system reboot)`);
+    console.log(`  Dashboard: ${baseUrl}`);
     console.log(`  Logs:      docker compose --env-file .env.local logs -f`);
   } else if (startChoice === "3") {
     console.log(`\n  🛑 Stopping Docker container...`);
@@ -663,7 +670,35 @@ ADMIN_EMAIL=${adminEmail}
   } else if (startChoice === "4") {
     console.log(`\n  📄 Viewing Docker logs (Press Ctrl+C to exit)...`);
     spawnSync("docker", ["compose", "--env-file", ".env.local", "logs", "-f"], { stdio: "inherit" });
-  } else if (startChoice === "5" && isCustomDomain) {
+  } else if (startChoice === "5") {
+    // Auto-start on boot via systemd
+    console.log(`\n  ⚙️  Setting up systemd service for auto-start on boot...`);
+    const workDir = process.cwd();
+    const serviceContent = `[Unit]
+Description=Local-Cloud Server
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=${workDir}
+ExecStart=/usr/bin/docker compose --env-file ${workDir}/.env.local up -d
+ExecStop=/usr/bin/docker compose down
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target
+`;
+    const svcPath = path.join(os.tmpdir(), "local-cloud.service");
+    fs.writeFileSync(svcPath, serviceContent);
+    spawnSync("sudo", ["mv", svcPath, "/etc/systemd/system/local-cloud.service"], { stdio: "inherit" });
+    spawnSync("sudo", ["systemctl", "daemon-reload"], { stdio: "inherit" });
+    spawnSync("sudo", ["systemctl", "enable", "local-cloud.service"], { stdio: "inherit" });
+    spawnSync("sudo", ["systemctl", "start", "local-cloud.service"], { stdio: "inherit" });
+    console.log(`\n  ✅ Auto-start enabled! Your server will now start automatically on every system reboot.`);
+    console.log(`  Manage with: sudo systemctl status local-cloud`);
+  } else if (startChoice === "6" && isCustomDomain) {
     console.log(`\n  ⚙️  Automatically configuring Nginx & SSL...`);
     console.log(`  [1/4] Installing nginx and certbot...`);
     spawnSync("sudo", ["apt", "update"], { stdio: "inherit" });
@@ -694,7 +729,7 @@ ADMIN_EMAIL=${adminEmail}
     spawnSync("sudo", ["certbot", "--nginx", "-d", hostname], { stdio: "inherit" });
     
     console.log(`\n  ✅ Nginx and SSL setup complete!`);
-    console.log(`  You can now access your site securely at: https://${hostname}`);
+    console.log(`  Visit your site at: https://${hostname}`);
     console.log(`\n  To start the actual server now, run:`);
     console.log(`  docker compose --env-file .env.local up -d`);
   } else {
