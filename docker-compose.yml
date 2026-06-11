@@ -16,6 +16,9 @@ services:
       # This volume persists across container restarts and upgrades.
       - lootops_data:/data/uploads
 
+    env_file:
+      - .env.local
+
     environment:
       # ── Server ───────────────────────────────────────────────────────
       PORT:                 ${PORT:-5000}
